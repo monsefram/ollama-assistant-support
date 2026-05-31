@@ -303,10 +303,17 @@ window.addEventListener("DOMContentLoaded", () => {
   });
   majRagStatus();
 
-  // Indexe automatiquement la base si elle ne l'est pas encore.
-  if (state.kb.docs.length && !state.kb.chunks.length) {
-    indexer().then(majRagStatus);
-  }
+  // Ouvre IndexedDB, charge les embeddings en mémoire, puis indexe si nécessaire.
+  ouvrirRagDB()
+    .then(() => idbChargerTous())
+    .then(() => {
+      if (state.kb.docs.length && !state.kb.chunks.length) return indexer();
+      // Si les chunks existent mais que les embeddings ne sont pas en mémoire
+      // (nouvel onglet, redémarrage), on réindexe silencieusement.
+      if (state.kb.chunks.length && embMap.size === 0 && state.kb.embeddings) return indexer();
+    })
+    .then(majRagStatus)
+    .catch(() => majRagStatus()); // en cas d'échec IndexedDB → repli gracieux
 
   // Assistant vocal + Face ID
   initVoix();
@@ -682,9 +689,15 @@ async function sendMessage() {
     let contenu = m.content;
     if (dernier && m.role === "user") {
       const prefixeCat = state.categorie ? `[Catégorie : ${state.categorie}] ` : "";
+      // Contexte structuré : source + score + texte, pour que le modèle sache
+      // quoi prioriser et puisse mentionner ses sources.
       const contexte = extraits.length
-        ? `Contexte tiré de la base de connaissances de support (utilise-le s'il est pertinent, sinon ignore-le) :\n`
-          + extraits.map(e => `- ${e.texte}`).join("\n") + `\n\n`
+        ? `=== BASE DE CONNAISSANCES ===\n` +
+          extraits.map((e, i) => {
+            const pct = Math.round((e.scoreHybride ?? e.score ?? 0) * 100);
+            return `[Source ${i + 1} — ${e.docNom}${pct ? ` (pertinence ${pct}%)` : ""}]\n${e.texte}`;
+          }).join("\n\n") +
+          `\n===\n\nUtilise ces informations si elles sont pertinentes. Indique la source utilisée.\n\n`
         : "";
       contenu = contexte + prefixeCat + m.content;
     }
@@ -913,82 +926,238 @@ async function embed(texte) {
   throw dernierErreur;
 }
 
-/* Similarité cosinus entre deux vecteurs. */
+/* =====================================================================
+   RAG PROFESSIONNEL — moteur de recherche sémantique
+   Pipeline : chunking avec recouvrement → embeddings → hybrid search →
+              MMR diversity → injection structurée dans le prompt.
+   Stockage : métadonnées en localStorage, embeddings en IndexedDB
+              (pas de limite de 5 Mo).
+   ===================================================================== */
+
+/* ---- Similarité cosinus entre deux vecteurs ---- */
 function cosinus(a, b) {
   let dot = 0, na = 0, nb = 0;
   for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
   return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8);
 }
 
-/* Découpe un mot-clé : minuscules, sans accents, sans ponctuation. */
-function motsCles(s) {
-  return (s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[a-z0-9]+/g)) || [];
+/* ---- Stockage des embeddings dans IndexedDB ---- */
+const IDB_NAME  = "support-ia-rag";
+const IDB_STORE = "embeddings";
+let ragDB = null;
+// Cache en mémoire : Map<chunkId, Float32Array>
+const embMap = new Map();
+
+function ouvrirRagDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE, { keyPath: "id" });
+    req.onsuccess = e => { ragDB = e.target.result; res(); };
+    req.onerror   = () => rej(new Error("IndexedDB indisponible"));
+  });
 }
-function scoreMotsCles(motsQuestion, texte) {
-  const ensemble = new Set(motsCles(texte));
-  let n = 0;
-  motsQuestion.forEach(m => { if (m.length > 2 && ensemble.has(m)) n++; });
-  return motsQuestion.length ? n / motsQuestion.length : 0;
+async function idbSauver(id, vecteur) {
+  if (!ragDB) return;
+  const tx = ragDB.transaction(IDB_STORE, "readwrite");
+  tx.objectStore(IDB_STORE).put({ id, v: Array.from(vecteur) });
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+}
+async function idbChargerTous() {
+  if (!ragDB) return;
+  const tx = ragDB.transaction(IDB_STORE, "readonly");
+  const tous = await new Promise((res, rej) => {
+    const req = tx.objectStore(IDB_STORE).getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror = rej;
+  });
+  tous.forEach(r => embMap.set(r.id, new Float32Array(r.v)));
+}
+async function idbVider() {
+  if (!ragDB) return;
+  const tx = ragDB.transaction(IDB_STORE, "readwrite");
+  tx.objectStore(IDB_STORE).clear();
+  embMap.clear();
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
+}
+async function idbSupprimerDoc(docId) {
+  if (!ragDB) return;
+  const tx = ragDB.transaction(IDB_STORE, "readwrite");
+  const store = tx.objectStore(IDB_STORE);
+  const tous = await new Promise((res, rej) => {
+    const req = store.getAllKeys(); req.onsuccess = () => res(req.result); req.onerror = rej;
+  });
+  tous.filter(k => k.startsWith(docId + "-")).forEach(k => { store.delete(k); embMap.delete(k); });
+  return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
 }
 
-/* Découpe un document en passages (séparés par une ligne vide). */
+/* ---- 1. CHUNKING avec fenêtre glissante et recouvrement ---- */
+const CHUNK_CIBLE  = 300;  // longueur cible d'un chunk (caractères)
+const CHUNK_RECOUV = 80;   // recouvrement entre chunks consécutifs (caractères)
+
+/* Découpe un texte en phrases courtes. */
+function enPhrases(texte) {
+  return texte
+    .split(/(?<=[.!?;])\s+|(?<=\n)\s*/)
+    .map(s => s.trim())
+    .filter(Boolean);
+}
+
+/* Regroupe les phrases en chunks de ~CHUNK_CIBLE caractères avec recouvrement. */
 function decouper(texte) {
-  return texte.split(/\n\s*\n/).map(s => s.trim()).filter(Boolean);
+  const phrases = enPhrases(texte);
+  const chunks = [];
+  let debut = 0;
+
+  while (debut < phrases.length) {
+    let bloc = "";
+    let fin = debut;
+    while (fin < phrases.length && (bloc + " " + phrases[fin]).length < CHUNK_CIBLE) {
+      bloc += (bloc ? " " : "") + phrases[fin];
+      fin++;
+    }
+    // Ajoute au moins une phrase même si elle dépasse la cible.
+    if (fin === debut) { bloc = phrases[debut]; fin = debut + 1; }
+    chunks.push(bloc.trim());
+
+    // Calcule le point de départ suivant en reculant de CHUNK_RECOUV caractères.
+    let recouv = 0;
+    while (fin > debut + 1 && recouv < CHUNK_RECOUV) {
+      fin--;
+      recouv += phrases[fin].length;
+    }
+    debut = Math.max(debut + 1, fin);
+  }
+  return chunks.filter(Boolean);
 }
 
-/* Construit l'index : chunks + vectorisation (avec repli mots-clés). */
+/* ---- 2. INDEXATION (embed + sauvegarde IndexedDB) ---- */
 async function indexer() {
+  await idbVider();
+
   const chunks = [];
   state.kb.docs.forEach(doc => {
     decouper(doc.texte).forEach((txt, i) => {
-      chunks.push({ id: `${doc.id}-${i}`, docNom: doc.nom, texte: txt, emb: null });
+      chunks.push({ id: `${doc.id}-${i}`, docId: doc.id, docNom: doc.nom, texte: txt });
     });
   });
 
-  // Tente la vectorisation ; au moindre échec on bascule en mode mots-clés.
-  let embeddings = chunks.length > 0;
+  let avecEmb = chunks.length > 0;
   for (let i = 0; i < chunks.length; i++) {
-    setKBProgress(`Indexation… ${i + 1}/${chunks.length}`);
-    try { chunks[i].emb = await embed(chunks[i].texte); }
-    catch { embeddings = false; break; }
+    setKBProgress(`Indexation… ${i + 1} / ${chunks.length}`);
+    try {
+      const vecteur = await embed(chunks[i].texte);
+      const arr = new Float32Array(vecteur);
+      embMap.set(chunks[i].id, arr);
+      await idbSauver(chunks[i].id, arr);
+    } catch {
+      avecEmb = false;
+      break;
+    }
   }
 
-  state.kb.chunks = chunks;
-  state.kb.embeddings = embeddings;
+  // On ne stocke plus les embeddings dans state (→ IndexedDB).
+  state.kb.chunks    = chunks;   // seulement texte + métadonnées
+  state.kb.embeddings = avecEmb;
   sauver();
-  return { total: chunks.length, embeddings };
+  return { total: chunks.length, embeddings: avecEmb };
 }
 
-/* Récupère les passages les plus pertinents pour une question. */
+/* ---- 3. SCORING HYBRIDE (sémantique 65 % + BM25 35 %) ---- */
+function normaliser(s) {
+  return (s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[a-z0-9]+/g)) || [];
+}
+
+/* Score BM25 simplifié : tient compte de la fréquence et longueur du chunk. */
+function scoreBM25(termes, texte) {
+  const k1 = 1.5, b = 0.75, moyenneLen = 250;
+  const mots = normaliser(texte);
+  const freq = {};
+  mots.forEach(m => { freq[m] = (freq[m] || 0) + 1; });
+  const docLen = mots.length;
+  let s = 0;
+  termes.forEach(t => {
+    if (t.length < 3) return;
+    const tf = freq[t] || 0;
+    s += (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * docLen / moyenneLen));
+  });
+  return s / (termes.length || 1);
+}
+
+function scoreHybride(semScore, bm25Score) {
+  return 0.65 * semScore + 0.35 * Math.min(bm25Score, 1);
+}
+
+/* ---- 4. MMR — Maximal Marginal Relevance (diversité des résultats) ---- */
+const MMR_LAMBDA = 0.65; // 1 = pertinence pure, 0 = diversité pure
+
+function mmr(candidats, topK) {
+  if (!candidats.length) return [];
+  const selectionnes = [];
+  const restants = [...candidats];
+
+  while (selectionnes.length < topK && restants.length) {
+    let meilleurIdx = 0;
+    let meilleurScore = -Infinity;
+
+    restants.forEach((c, i) => {
+      const pertinence = c.scoreHybride;
+      const maxSim = selectionnes.length
+        ? Math.max(...selectionnes.map(s => {
+            const ea = embMap.get(c.id);
+            const eb = embMap.get(s.id);
+            return (ea && eb) ? cosinus(ea, eb) : 0;
+          }))
+        : 0;
+      const score = MMR_LAMBDA * pertinence - (1 - MMR_LAMBDA) * maxSim;
+      if (score > meilleurScore) { meilleurScore = score; meilleurIdx = i; }
+    });
+
+    selectionnes.push(restants[meilleurIdx]);
+    restants.splice(meilleurIdx, 1);
+  }
+  return selectionnes;
+}
+
+/* ---- 5. RÉCUPÉRATION — pipeline complet ---- */
 async function recupererContexte(question) {
   const chunks = state.kb.chunks;
   if (!chunks.length) return [];
 
-  if (state.kb.embeddings && chunks[0].emb) {
-    // Mode embeddings : similarité sémantique.
-    const q = await embed(question);
-    return chunks
-      .map(c => ({ ...c, score: cosinus(q, c.emb) }))
-      .sort((a, b) => b.score - a.score)
-      .filter(c => c.score > SEUIL_COS)
-      .slice(0, TOP_K);
+  const termes = normaliser(question);
+
+  if (state.kb.embeddings && embMap.size > 0) {
+    // Mode sémantique + BM25 + MMR.
+    let qEmb;
+    try { qEmb = new Float32Array(await embed(question)); } catch { qEmb = null; }
+
+    const candidats = chunks
+      .map(c => {
+        const emb = embMap.get(c.id);
+        const sem = (qEmb && emb) ? cosinus(qEmb, emb) : 0;
+        const bm25 = scoreBM25(termes, c.texte);
+        return { ...c, sem, bm25, scoreHybride: scoreHybride(sem, bm25) };
+      })
+      .filter(c => c.scoreHybride > SEUIL_COS)
+      .sort((a, b) => b.scoreHybride - a.scoreHybride)
+      .slice(0, TOP_K * 4); // pool plus large pour MMR
+
+    return mmr(candidats, TOP_K);
   }
 
-  // Mode mots-clés (repli sans embeddings).
-  const motsQuestion = motsCles(question);
+  // Repli mots-clés seuls (nomic non installé).
   return chunks
-    .map(c => ({ ...c, score: scoreMotsCles(motsQuestion, c.texte) }))
-    .sort((a, b) => b.score - a.score)
-    .filter(c => c.score > 0)
+    .map(c => ({ ...c, scoreHybride: scoreBM25(termes, c.texte) }))
+    .filter(c => c.scoreHybride > 0)
+    .sort((a, b) => b.scoreHybride - a.scoreHybride)
     .slice(0, TOP_K);
 }
 
-/* Met à jour le statut RAG dans la barre latérale. */
+/* ---- 6. STATUT RAG ---- */
 function majRagStatus() {
   const n = state.kb.chunks.length;
   if (!state.rag) { ragStatusEl.textContent = "Désactivé"; return; }
   if (!n) { ragStatusEl.textContent = "Base vide"; return; }
-  const mode = state.kb.embeddings ? "embeddings" : "mots-clés";
+  const mode = state.kb.embeddings ? "hybride + MMR" : "mots-clés";
   ragStatusEl.textContent = `${n} passages · ${mode}`;
 }
 
@@ -1165,9 +1334,10 @@ async function ajouterDoc() {
 async function supprimerDoc(id) {
   if (!await demanderConfirmation("Supprimer le document",
       "Ce document sera retiré de la base de connaissances.")) return;
-  state.kb.docs = state.kb.docs.filter(d => d.id !== id);
+  await idbSupprimerDoc(id); // supprime les embeddings de ce doc dans IndexedDB
+  state.kb.docs   = state.kb.docs.filter(d => d.id !== id);
+  state.kb.chunks = state.kb.chunks.filter(c => c.docId !== id);
   sauver();
-  await indexer();
   renderKB(); majRagStatus();
   toast("Document supprimé");
 }
