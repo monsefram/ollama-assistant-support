@@ -36,17 +36,17 @@ L'avantage principal d'une approche self-hosted, c'est que les données restent 
 
 ## Vue d'ensemble des sources
 
-| # | Source | Type | Note /10 |
-|---|---|---|---|
-| S1 | Documentation API Ollama (GitHub) | Officielle | 10/10 |
-| S2 | FAQ officielle Ollama | Officielle | 9/10 |
-| S3 | NIST AI Risk Management Framework | Institutionnelle | 9/10 |
-| S4 | NIST Generative AI Profile (AI 600-1) | Institutionnelle | 9/10 |
-| S5 | OWASP Top 10 for LLM Applications 2025 | Organisme de sécurité | 9/10 |
-| S6 | Model Card Llama 3.2 (Meta – GitHub) | Officielle | 8/10 |
-| S7 | Mistral 7B – Annonce officielle | Commerciale | 7/10 |
-| S8 | IBM – Qu'est-ce que les hallucinations IA | Entreprise privée | 6/10 |
-| S9 | Local LLMs – Étude universitaire (Andorre) | Académique | 8/10 |
+| #   | Source                                     | Type                  | Note /10 |
+| --- | ------------------------------------------ | --------------------- | -------- |
+| S1  | Documentation API Ollama (GitHub)          | Officielle            | 10/10    |
+| S2  | FAQ officielle Ollama                      | Officielle            | 9/10     |
+| S3  | NIST AI Risk Management Framework          | Institutionnelle      | 9/10     |
+| S4  | NIST Generative AI Profile (AI 600-1)      | Institutionnelle      | 9/10     |
+| S5  | OWASP Top 10 for LLM Applications 2025     | Organisme de sécurité | 9/10     |
+| S6  | Model Card Llama 3.2 (Meta – GitHub)       | Officielle            | 8/10     |
+| S7  | Mistral 7B – Annonce officielle            | Commerciale           | 7/10     |
+| S8  | IBM – Qu'est-ce que les hallucinations IA  | Entreprise privée     | 6/10     |
+| S9  | Local LLMs – Étude universitaire (Andorre) | Académique            | 8/10     |
 
 ---
 

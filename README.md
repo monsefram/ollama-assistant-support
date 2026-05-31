@@ -1,8 +1,8 @@
 # Serveur IA self-hosted avec Ollama pour le support technique
 
 Cours : Veille technologique (420-1SH-SW)  
-Étudiant : [Ton nom]  
-Session : [Session en cours]
+Étudiant : [Monsif  ramhane]  
+Session : [H26]
 
 ---
 

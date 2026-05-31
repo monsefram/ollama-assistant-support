@@ -289,3 +289,34 @@ Note : **8/10**
 
 ### Justification de la note
 C'est la seule source académique trouvée qui traite directement du sujet central du projet (LLM self-hosted pour la confidentialité). Elle donne du poids scientifique à la section sur les avantages du modèle local.
+
+---
+
+## S10 – RAG for Large Language Models: A Survey (arXiv)
+
+### Lien
+https://arxiv.org/abs/2312.10997
+
+### Type de source
+Académique (article de recherche publié sur arXiv, co-écrit par des chercheurs de plusieurs universités).
+
+### Fiabilité
+arXiv est une plateforme de prépublication utilisée par la communauté scientifique en informatique et en IA. Cet article a été cité des milliers de fois depuis sa publication fin 2023. C'est la référence principale sur le sujet du RAG dans la littérature scientifique. Très fiable pour expliquer le concept et son fonctionnement.
+
+### Résumé
+Le RAG (Retrieval-Augmented Generation) est une technique qui permet à un LLM d'aller chercher de l'information dans une base de documents avant de formuler sa réponse. Sans RAG, le modèle ne peut répondre qu'à partir de ce qu'il a appris pendant l'entraînement, avec une date de coupure fixe. Avec RAG, on connecte le modèle à des documents locaux (manuels, guides, tickets de support) et il s'en sert pour construire sa réponse. Ça réduit les hallucinations et permet au modèle d'avoir des connaissances à jour sans avoir à le réentraîner.
+
+### Informations utiles pour mon projet
+- Un LLM local comme Llama 3.2 a une limite : il ne connaît que ce qui était dans ses données d'entraînement → le RAG règle ce problème
+- Cas d'usage concret : connecter mon assistant de support à un manuel technique ou une base de connaissances interne
+- Le RAG fonctionne en trois étapes : découper les documents en morceaux, les indexer, puis chercher les morceaux pertinents quand une question arrive
+- Compatible avec Ollama : des outils comme LlamaIndex ou LangChain permettent de mettre en place un RAG en local
+
+### Limites de la source
+L'article est une revue académique technique (survey), donc assez dense. Il décrit plusieurs variantes du RAG (Naive RAG, Advanced RAG, Modular RAG) qui dépassent le cadre d'un projet de cégep. Il faut extraire l'essentiel du concept sans rentrer dans les détails mathématiques.
+
+### Pertinence
+Note : **8/10**
+
+### Justification de la note
+Le RAG est une piste d'amélioration directe et concrète pour mon projet. En le mentionnant dans la conclusion du rapport, je montre que je comprends les limites actuelles de mon système et que je sais comment les dépasser. Source académique solide qui donne du poids à cette proposition.

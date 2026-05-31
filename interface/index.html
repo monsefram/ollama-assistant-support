@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JARVITO — Assistant de support informatique (local)</title>
+
+  <!-- Typographie : Hanken Grotesk (UI) + JetBrains Mono (signature technique) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ════════════════ BARRE LATÉRALE ════════════════ -->
+  <aside class="sidebar">
+
+    <!-- Marque -->
+    <div class="brand">
+      <div class="brand-mark orb spin"></div>
+      <div class="brand-text">
+        <span class="brand-name">JARVITO</span>
+        <span class="brand-sub">Support informatique · local</span>
+      </div>
+    </div>
+
+    <!-- Nouvelle conversation -->
+    <button class="btn-primary" onclick="nouvelleConversation()">
+      <i data-lucide="plus"></i> <span>Nouvelle conversation</span>
+    </button>
+
+    <!-- Statut de connexion à Ollama -->
+    <div class="status" id="status">
+      <span class="status-dot" id="status-dot"></span>
+      <div class="status-text">
+        <span class="status-label" id="status-label">Vérification…</span>
+        <span class="status-host">localhost:11434</span>
+      </div>
+    </div>
+
+    <!-- Modèle -->
+    <div class="config-group">
+      <label for="model-select">Modèle</label>
+      <div class="select-wrap">
+        <select id="model-select"></select>
+        <i data-lucide="chevron-down"></i>
+      </div>
+    </div>
+
+    <!-- Base de connaissances (RAG) -->
+    <div class="config-group">
+      <label>Base de connaissances (RAG)</label>
+      <div class="rag-row">
+        <label class="switch" title="Activer la recherche dans la base de connaissances">
+          <input type="checkbox" id="rag-toggle" />
+          <span class="slider"></span>
+        </label>
+        <span class="rag-status" id="rag-status">—</span>
+        <button class="lib-add" onclick="openKB()" title="Gérer la base de connaissances">
+          <i data-lucide="database"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Assistant vocal -->
+    <div class="config-group">
+      <label>Assistant vocal</label>
+      <div class="rag-row">
+        <label class="switch" title="Lire les réponses à voix haute">
+          <input type="checkbox" id="tts-toggle" />
+          <span class="slider"></span>
+        </label>
+        <span class="rag-status" id="voice-status">Lecture des réponses</span>
+      </div>
+      <div class="select-wrap" style="margin-top: 8px">
+        <select id="voice-select" title="Voix de l'assistant"></select>
+        <i data-lucide="chevron-down"></i>
+      </div>
+    </div>
+
+    <!-- Sécurité — Face ID (prototype expérimental) -->
+    <div class="config-group">
+      <label>Face ID (expérimental)</label>
+      <div class="rag-row">
+        <label class="switch" title="Limiter la réponse vocale au visage autorisé">
+          <input type="checkbox" id="face-toggle" />
+          <span class="slider"></span>
+        </label>
+        <span class="rag-status" id="face-status">Désactivé</span>
+        <button class="lib-add" onclick="openFace()" title="Gérer Face ID">
+          <i data-lucide="scan-face"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Bibliothèque : projets + conversations (injectée par script.js) -->
+    <div class="library" id="library"></div>
+
+    <!-- Pied -->
+    <div class="sidebar-foot">
+      <div class="local-note">
+        <i data-lucide="lock"></i>
+        <span>Exécution 100&nbsp;% locale. Aucune donnée n'est transmise en ligne.</span>
+      </div>
+      <div class="course">Veille technologique · 420-1SH-SW</div>
+    </div>
+  </aside>
+
+  <!-- ════════════════ ZONE PRINCIPALE ════════════════ -->
+  <main class="main">
+
+    <!-- En-tête -->
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1 id="chat-title">Nouvelle conversation</h1>
+        <p>JARVITO — diagnostic et résolution de problèmes informatiques, propulsé par un modèle 100 % local.</p>
+      </div>
+      <div class="topbar-meta">
+        <div class="meta-pill" id="model-pill" title="Modèle actif">
+          <i data-lucide="bot"></i> <span>—</span>
+        </div>
+        <div class="meta-pill" id="time-pill" title="Temps de la dernière réponse">
+          <i data-lucide="timer"></i> <span>—</span>
+        </div>
+        <button class="meta-btn" id="voice-conv-btn" onclick="toggleConversation()" title="Conversation vocale">
+          <i data-lucide="audio-lines"></i>
+        </button>
+        <button class="meta-btn" onclick="effacerChatActif()" title="Vider cette conversation">
+          <i data-lucide="eraser"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Conversation -->
+    <section class="conversation" id="conversation">
+      <!-- état vide / messages injectés par script.js -->
+    </section>
+
+    <!-- Saisie -->
+    <footer class="composer">
+      <div class="composer-box">
+        <button id="mic-btn" class="mic" onclick="toggleEcoute()" title="Commande vocale">
+          <i data-lucide="mic"></i>
+        </button>
+        <textarea id="input" rows="1"
+          placeholder="Décrivez votre problème technique…"
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button id="send-btn" class="send" onclick="sendMessage()" title="Envoyer">
+          <i data-lucide="arrow-up"></i>
+        </button>
+      </div>
+      <p class="composer-hint" id="composer-hint">Entrée pour envoyer · Maj + Entrée pour une nouvelle ligne</p>
+    </footer>
+
+  </main>
+</div>
+
+<!-- ════════════════ CONSOLE DE CONVERSATION VOCALE ════════════════ -->
+<div class="voice-console" id="voice-console">
+  <div class="vc-visual" id="vc-visual"><span class="vc-orb orb"></span></div>
+  <div class="vc-info">
+    <div class="vc-state" id="vc-state">En attente</div>
+    <div class="vc-text" id="vc-text">Cliquez sur le micro pour parler…</div>
+  </div>
+  <button class="vc-stop" onclick="arreterConversation()">
+    <i data-lucide="square"></i> Arrêter
+  </button>
+</div>
+
+<!-- ════════════════ ÉCRAN DE VERROUILLAGE FACE ID ════════════════ -->
+<div class="lock-overlay" id="lock-overlay">
+  <div class="lock-card">
+    <div class="lock-icon orb spin breath"></div>
+    <h2>JARVITO est verrouillé</h2>
+    <p>L'accès à JARVITO est protégé par une vérification faciale expérimentale.
+       Vérifiez votre identité pour déverrouiller l'assistant, ou ignorez cette étape.</p>
+    <div class="lock-video-wrap">
+      <video id="lock-video" autoplay muted playsinline></video>
+      <div class="face-badge" id="lock-badge">Caméra inactive</div>
+    </div>
+    <div class="lock-actions">
+      <button class="btn-modal primary" onclick="lockVerifier()">
+        <i data-lucide="shield-check"></i> Vérifier mon visage
+      </button>
+      <button class="btn-modal ghost" onclick="lockEnregistrer()">
+        <i data-lucide="user-plus"></i> Enregistrer
+      </button>
+    </div>
+    <button class="lock-skip" onclick="lockSkip()">Ignorer et continuer</button>
+  </div>
+</div>
+
+<!-- ════════════════ MODALE (fenêtre de dialogue) ════════════════ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head"><h3 id="modal-title">Titre</h3></div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot">
+      <button class="btn-modal ghost" id="modal-cancel">Annuler</button>
+      <button class="btn-modal primary" id="modal-ok">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notification temporaire (toast) -->
+<div class="toast" id="toast"></div>
+
+<!-- ════════════════ BASE DE CONNAISSANCES (RAG) ════════════════ -->
+<div class="kb-overlay" id="kb-overlay">
+  <div class="kb-panel">
+    <div class="kb-head">
+      <h3><i data-lucide="database"></i> Base de connaissances</h3>
+      <button class="kb-close" onclick="closeKB()" title="Fermer"><i data-lucide="x"></i></button>
+    </div>
+    <div class="kb-status" id="kb-status"></div>
+    <div class="kb-docs" id="kb-docs"></div>
+    <div class="kb-add">
+
+      <!-- Zone de dépôt de fichier -->
+      <div class="kb-dropzone" id="kb-dropzone"
+           onclick="document.getElementById('kb-file-input').click()"
+           ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+        <i data-lucide="upload-cloud"></i>
+        <div>
+          <span class="kb-drop-main">Cliquez ou glissez un fichier ici</span>
+          <span class="kb-drop-sub">PDF, DOCX, TXT — le texte sera extrait automatiquement</span>
+        </div>
+        <input type="file" id="kb-file-input" accept=".pdf,.docx,.txt,.md"
+               style="display:none" onchange="importerFichier(event)" />
+      </div>
+
+      <!-- Barre de progression pendant l'extraction -->
+      <div class="kb-progress" id="kb-progress" style="display:none">
+        <div class="kb-progress-bar" id="kb-progress-bar"></div>
+        <span id="kb-progress-text">Extraction…</span>
+      </div>
+
+      <!-- Champs titre + texte (pré-remplis après import) -->
+      <input id="kb-doc-nom" class="modal-input" placeholder="Titre du document" />
+      <textarea id="kb-doc-texte" class="modal-input kb-textarea"
+        placeholder="Ou collez directement du texte ici. Séparez les passages par une ligne vide."></textarea>
+
+      <div class="kb-actions">
+        <button class="btn-modal ghost" onclick="reindexer()">
+          <i data-lucide="refresh-cw"></i> Réindexer
+        </button>
+        <button class="btn-modal primary" onclick="ajouterDoc()">
+          <i data-lucide="plus"></i> Ajouter
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ FACE ID (prototype expérimental) ════════════════ -->
+<div class="face-overlay" id="face-overlay">
+  <div class="face-panel">
+    <div class="kb-head">
+      <h3><i data-lucide="scan-face"></i> Face ID — prototype expérimental</h3>
+      <button class="kb-close" onclick="closeFace()" title="Fermer"><i data-lucide="x"></i></button>
+    </div>
+    <div class="face-body">
+      <div class="face-video-wrap">
+        <video id="face-video" autoplay muted playsinline></video>
+        <div class="face-badge" id="face-badge">Caméra inactive</div>
+      </div>
+      <p class="face-note">
+        Prototype éducatif uniquement. La reconnaissance faciale dans un navigateur
+        n'est pas un système de sécurité fiable : elle est sensible à l'éclairage et
+        peut être trompée par une simple photo. À ne jamais utiliser pour protéger de
+        vraies données.
+      </p>
+      <div class="face-actions">
+        <button class="btn-modal ghost" id="face-cam-btn" onclick="basculerCamera()">
+          <i data-lucide="video"></i> Activer la caméra
+        </button>
+        <button class="btn-modal ghost" onclick="enregistrerVisage()">
+          <i data-lucide="user-plus"></i> Enregistrer mon visage
+        </button>
+        <button class="btn-modal primary" onclick="verifierVisage()">
+          <i data-lucide="shield-check"></i> Vérifier
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Lecture de PDF (Mozilla PDF.js) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<!-- Lecture de DOCX (Mammoth.js) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- Icônes professionnelles (au trait, sans emoji) -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
