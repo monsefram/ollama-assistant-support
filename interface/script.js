@@ -104,44 +104,6 @@ const SUGGESTIONS_GENERIQUES = [
   { icone: "wrench",      texte: "Quelles vérifications de base puis-je faire ?" }
 ];
 
-/* Documents de départ de la base de connaissances (RAG).
-   Chaque passage est séparé par une ligne vide : il devient un « chunk ». */
-const STARTER_DOCS = [
-  { id: "doc-wifi", nom: "Dépannage Wi-Fi et réseau", texte:
-`Si le Wi-Fi ne se connecte pas, commencer par vérifier que le mode avion est désactivé et que la carte Wi-Fi est activée. Redémarrer le routeur en l'éteignant 30 secondes puis en le rallumant. Oublier le réseau dans les paramètres Windows puis le reconnecter en saisissant à nouveau le mot de passe.
-
-Si l'appareil est connecté au Wi-Fi mais qu'aucune page ne charge, le problème vient souvent du DNS ou de l'adresse IP. Ouvrir l'invite de commandes et exécuter "ipconfig /release" puis "ipconfig /renew", et enfin "ipconfig /flushdns". Tester ensuite un site web. Si rien ne fonctionne, brancher un câble Ethernet pour vérifier si le problème vient du Wi-Fi.
-
-Pour une connexion lente, rapprocher l'appareil du routeur, limiter le nombre d'appareils connectés et vérifier qu'aucun téléchargement volumineux n'est en cours. Redémarrer le routeur règle souvent les ralentissements temporaires.` },
-
-  { id: "doc-lent", nom: "Ordinateur lent", texte:
-`Un ordinateur lent est souvent causé par trop de programmes qui démarrent automatiquement. Ouvrir le Gestionnaire des tâches (Ctrl + Maj + Échap), aller dans l'onglet Démarrage et désactiver les programmes non essentiels.
-
-Vérifier l'espace disque disponible : un disque presque plein ralentit fortement Windows. Libérer de l'espace avec l'outil Nettoyage de disque et désinstaller les logiciels inutilisés.
-
-Si la lenteur est apparue récemment, vérifier les mises à jour Windows et redémarrer la machine. Un redémarrage complet libère la mémoire et termine les mises à jour en attente. En dernier recours, lancer une analyse antivirus, car un logiciel malveillant peut consommer les ressources.` },
-
-  { id: "doc-imprimante", nom: "Imprimante non détectée", texte:
-`Si l'imprimante n'est pas détectée, vérifier d'abord qu'elle est allumée et correctement branchée (câble USB ou connexion Wi-Fi). Sur une imprimante réseau, confirmer qu'elle est sur le même réseau que l'ordinateur.
-
-Redémarrer le service d'impression de Windows : ouvrir Services, trouver "Spouleur d'impression", faire un clic droit puis Redémarrer. Cela débloque souvent la file d'attente.
-
-Si l'imprimante reste introuvable, réinstaller le pilote. Le télécharger depuis le site officiel du fabricant plutôt que d'utiliser un pilote générique. Vérifier aussi le niveau d'encre ou de toner avant de conclure à une panne.` },
-
-  { id: "doc-motdepasse", nom: "Mot de passe et compte", texte:
-`En cas d'oubli du mot de passe de session Windows, vérifier d'abord la touche Verr. Maj et la langue du clavier. Sur un compte Microsoft, utiliser l'option de réinitialisation en ligne depuis un autre appareil à l'adresse de récupération du compte.
-
-Sur un poste en entreprise ou dans une école, le mot de passe est géré par l'administrateur réseau : il faut le contacter pour une réinitialisation, car l'utilisateur ne peut pas le faire seul.
-
-Si le compte est bloqué après plusieurs tentatives, attendre quelques minutes avant de réessayer. Pour un cas critique (perte d'accès total, données importantes), recommander de faire appel à un technicien plutôt que de risquer une réinstallation qui effacerait les données.` },
-
-  { id: "doc-securite", nom: "Sécurité et virus", texte:
-`Si l'on soupçonne un virus, déconnecter l'appareil d'internet pour limiter la propagation, puis lancer une analyse complète avec l'antivirus installé (Windows Defender suffit dans la plupart des cas). Ne pas installer plusieurs antivirus en même temps : ils entrent en conflit.
-
-Après avoir cliqué sur un lien suspect, changer immédiatement les mots de passe importants depuis un autre appareil sûr, et activer la vérification en deux étapes sur les comptes sensibles.
-
-Les fenêtres publicitaires qui reviennent sans cesse proviennent souvent d'une extension de navigateur indésirable. Vérifier et supprimer les extensions inconnues. Pour toute suspicion d'intrusion sérieuse ou de vol de données, recommander de consulter un technicien spécialisé.` }
-];
 
 /* ---------------------------------------------------------------------
    2. ÉTAT (persisté dans localStorage)
@@ -153,7 +115,6 @@ let state = {
   actifId: null,      // id du chat actif
   categorie: "",      // catégorie sélectionnée pour le prochain message
   rag: true,          // recherche dans la base de connaissances activée
-  kbSeeded: false,    // base de départ déjà installée ?
   kb: { docs: [], chunks: [], embeddings: false }, // base de connaissances
   lectureVoix: false, // lire les réponses à voix haute
   voixNom: "",        // nom de la voix de synthèse choisie
@@ -278,13 +239,6 @@ function toast(message) {
 window.addEventListener("DOMContentLoaded", () => {
   charger();
 
-  // Amorce la base de connaissances au premier lancement.
-  if (!state.kbSeeded) {
-    state.kb.docs = STARTER_DOCS.map(d => ({ ...d }));
-    state.kbSeeded = true;
-    sauver();
-  }
-
   renderLibrary();
   if (state.actifId && trouverChat(state.actifId)) {
     ouvrirChat(state.actifId);
@@ -302,6 +256,13 @@ window.addEventListener("DOMContentLoaded", () => {
     state.rag = ragToggle.checked; sauver(); majRagStatus();
   });
   majRagStatus();
+
+  // Supprime les anciens documents de départ s'ils sont encore en mémoire.
+  const STARTER_IDS = ["doc-wifi", "doc-lent", "doc-imprimante", "doc-motdepasse", "doc-securite"];
+  const avantNettoyage = state.kb.docs.length;
+  state.kb.docs   = state.kb.docs.filter(d => !STARTER_IDS.includes(d.id));
+  state.kb.chunks = state.kb.chunks.filter(c => !STARTER_IDS.includes(c.docId));
+  if (state.kb.docs.length !== avantNettoyage) sauver();
 
   // Ouvre IndexedDB, charge les embeddings en mémoire, puis indexe si nécessaire.
   ouvrirRagDB()
