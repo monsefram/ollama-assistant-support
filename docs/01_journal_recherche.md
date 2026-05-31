@@ -30,6 +30,38 @@ Sujet : Serveur IA self-hosted avec Ollama pour le support technique
 
 ---
 
+## Observations pratiques (tests sur ma machine)
+
+Ces constats viennent de tests réels faits pendant le développement de l'interface, pas d'une source en ligne. Ils sont importants car ils montrent que le choix d'un modèle dépend autant du matériel que de la qualité théorique du modèle.
+
+| Date | Test effectué | Ce que j'ai observé | Conclusion |
+|---|---|---|---|
+| 2026-05-31 | Comparaison Llama 3.2 (3B) vs Mistral (7B) sur la même question de support (« mon ordinateur est lent depuis une mise à jour ») | Llama 3.2 invente des chemins de menus Windows qui n'existent pas (ex. « Propriétés dans la barre d'outils du Gestionnaire des tâches »). Mistral donne des étapes correctes et réalistes. | Un modèle 3B hallucine les interfaces logicielles même avec une bonne base de connaissances (RAG). La taille du modèle a un impact direct sur la fiabilité des réponses techniques. |
+| 2026-05-31 | Mesure du temps de réponse et vérification du matériel (`Get-CimInstance Win32_VideoController`) | Réponses entre 96 et 174 secondes même pour un modèle 3B. Carte graphique : Intel UHD Graphics (intégrée), pas de GPU dédié NVIDIA/AMD. | Sans GPU dédié, Ollama exécute le modèle sur le processeur (CPU), ce qui est beaucoup plus lent. La contrainte réelle n'est pas la RAM (16 Go) mais l'absence de GPU. Cela plafonne le choix à un modèle 7B ; un 14B serait trop lent (plusieurs minutes par réponse). |
+| 2026-05-31 | Réglage des paramètres d'inférence dans l'interface | En baissant la température de 0.8 (défaut) à 0.2, les réponses deviennent plus factuelles et le modèle invente beaucoup moins. | La température est un levier concret pour fiabiliser un assistant de support : on privilégie la précision à la créativité. |
+
+**Décision retenue :** utiliser **qwen2.5:7b** comme modèle principal. C'est le meilleur compromis qualité/vitesse pour une machine sans GPU dédié : même poids et même vitesse que Mistral, mais meilleur suivi des consignes et moins d'hallucinations sur les interfaces Windows.
+
+---
+
+## Pistes d'amélioration identifiées (2026-05-31)
+
+Ces pistes découlent des tests effectués sur l'interface. Elles montrent que le projet est vivant et qu'on a identifié des problèmes réels avec des solutions concrètes.
+
+| Priorité | Amélioration | Raison identifiée | Impact |
+|---|---|---|---|
+| 1 | Bouton « Régénérer » la dernière réponse | Le modèle dérape parfois ; pouvoir relancer sans retaper est essentiel en support | Confort utilisateur |
+| 1 | Étoffer la base de connaissances (imprimantes, comptes, son, navigateurs) | Chaque sujet absent force le modèle à inventer ; on l'a prouvé avec le chemin « navigateur par défaut » | Fiabilité du RAG |
+| 2 | Afficher le score de pertinence RAG dans l'interface (pas dans le prompt) | Rend le RAG visible et démontrable ; utile pour la présentation | Pédagogie |
+| 2 | Mode comparaison de modèles côte à côte | Répond directement à l'objectif du projet (comparer llama3.2 vs mistral vs qwen) | Valeur pédagogique forte |
+| 3 | Meilleure gestion hors-ligne (message clair + bouton Réessayer) | Aujourd'hui l'erreur est brute quand Ollama n'est pas lancé | Robustesse |
+| 3 | Export d'une conversation en .txt ou .md | Utile pour inclure des exemples dans le rapport final | Documentation |
+| 3 | Bouton Stop pendant la génération | Confort quand une réponse part trop longtemps | Confort utilisateur |
+
+**Cycle d'amélioration RAG démontré :** réponse fausse → identification du chemin inventé → enrichissement de la base → le modèle se corrige. Ce cycle a été répété 2 fois (chemins Windows Update et navigateur par défaut). C'est une démarche expérimentale à documenter dans le rapport.
+
+---
+
 ## Notes générales sur la recherche
 
 - Les sources institutionnelles (NIST, OWASP) sont les plus fiables pour justifier la partie sur les risques.
@@ -37,3 +69,4 @@ Sujet : Serveur IA self-hosted avec Ollama pour le support technique
 - La documentation officielle d'Ollama sur GitHub est la source technique principale de tout le projet.
 - L'étude de l'Université d'Andorre est la seule source académique neutre trouvée sur la confidentialité des LLM locaux.
 - L'article arXiv sur le RAG ouvre la porte à une piste d'amélioration concrète à présenter dans la conclusion du rapport.
+- Les tests pratiques (section Observations) montrent une limite concrète du projet : sans GPU dédié, le matériel — et non la RAM — dicte le choix du modèle. C'est un point fort à présenter, car il ancre le projet dans une contrainte réelle et mesurée.
