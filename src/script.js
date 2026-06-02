@@ -18,8 +18,8 @@ const STORE_KEY  = "support-ia-v1"; // clé de sauvegarde locale
 
 // RAG : modèle d'embeddings et nombre de passages récupérés.
 const EMBED_MODEL = "nomic-embed-text:latest"; // à installer : ollama pull nomic-embed-text
-const TOP_K       = 3;                  // nombre de passages injectés dans le prompt
-const SEUIL_COS   = 0.35;               // similarité minimale (mode embeddings)
+const TOP_K       = 2;                  // nombre de passages injectés dans le prompt
+const SEUIL_COS   = 0.50;               // similarité minimale (mode embeddings)
 
 // Modèles de repli si la détection automatique échoue (serveur hors-ligne).
 const MODELES_REPLI = [
@@ -640,6 +640,38 @@ async function sendMessage() {
   inputEl.value = "";
   inputEl.style.height = "auto";
 
+  // Génère la réponse à partir du dernier message utilisateur.
+  return genererReponse(chat, texte);
+}
+
+/* Régénère la dernière réponse de l'assistant sans retaper la question.
+   Retire la dernière réponse (mémoire + affichage), puis relance la
+   génération sur le dernier message de l'utilisateur. */
+async function regenererReponse() {
+  if (enCours) return;
+  const chat = chatActif();
+  if (!chat || !chat.messages.length) return;
+  // La dernière entrée doit être une réponse de l'assistant.
+  if (chat.messages[chat.messages.length - 1].role !== "bot") return;
+  // Récupère le dernier message utilisateur (la question à reposer).
+  const dernierUser = [...chat.messages].reverse().find(m => m.role === "user");
+  if (!dernierUser) return;
+  // Retire la dernière réponse (mémoire + DOM).
+  chat.messages.pop();
+  const botsDom = convEl.querySelectorAll(".msg.bot");
+  if (botsDom.length) botsDom[botsDom.length - 1].remove();
+  sauver();
+  return genererReponse(chat, dernierUser.content);
+}
+
+/* Cœur de la génération : construit le prompt (avec contexte RAG), interroge
+   Ollama en streaming, puis affiche la réponse, ses sources et sa barre
+   d'actions. Partagé par sendMessage() et regenererReponse(). */
+async function genererReponse(chat, texteUtilisateur) {
+  // Une seule réponse « régénérable » à la fois : on retire le bouton
+  // Régénérer des réponses précédentes.
+  convEl.querySelectorAll(".regen-btn").forEach(b => b.remove());
+
   const typingEl = afficherTyping();
   enCours = true;
   sendBtn.disabled = true;
@@ -647,7 +679,7 @@ async function sendMessage() {
   // RAG : récupère les passages pertinents de la base de connaissances.
   let extraits = [];
   if (state.rag && state.kb.chunks.length) {
-    try { extraits = await recupererContexte(texte); } catch { extraits = []; }
+    try { extraits = await recupererContexte(texteUtilisateur); } catch { extraits = []; }
   }
 
   // Construit les messages envoyés au modèle.
@@ -685,8 +717,14 @@ async function sendMessage() {
         // Réglages d'inférence pour un assistant de support : température basse
         // = réponses factuelles et ancrées, sans invention de menus ou de
         // chemins qui n'existent pas.
-        options: { temperature: 0.2, top_p: 0.85, repeat_penalty: 1.15 }
-      })
+        options: {
+          temperature: 0.2,
+          top_p: 0.85,
+          repeat_penalty: 1.15,
+          num_predict: 450,   // plafond de tokens générés → réponses courtes et rapides
+          num_ctx: 2048       // fenêtre de contexte réduite : suffisant pour support + RAG
+        },
+        keep_alive: "30m"     // garde le modèle chargé en RAM entre les requêtes
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -804,10 +842,12 @@ function ajouterMeta(wrap, contenu, secondes) {
     <span class="meta-item"><i data-lucide="bot"></i>${escapeHtml(modele)}</span>
     <span class="meta-item"><i data-lucide="timer"></i><span>${secondes} s</span></span>
     <span class="meta-item"><i data-lucide="clock"></i><span>${heure}</span></span>
-    <button class="copy-btn"><i data-lucide="copy"></i> Copier</button>`;
-  meta.querySelector(".copy-btn").addEventListener("click", function () {
+    <button class="copy-btn"><i data-lucide="copy"></i> Copier</button>
+    <button class="copy-btn regen-btn" title="Relancer cette réponse"><i data-lucide="refresh-cw"></i> Régénérer</button>`;
+  meta.querySelector(".copy-btn:not(.regen-btn)").addEventListener("click", function () {
     copierTexte(this, contenu);
   });
+  meta.querySelector(".regen-btn").addEventListener("click", regenererReponse);
   body.appendChild(meta);
 }
 
@@ -821,11 +861,21 @@ function copierTexte(btn, texte) {
 /* Affiche les sources de la base de connaissances utilisées pour la réponse. */
 function afficherSources(wrap, extraits) {
   const body = wrap.querySelector(".msg-body");
-  const noms = [...new Set(extraits.map(e => e.docNom))];
+  // Score de pertinence par document : on retient le meilleur passage de
+  // chaque source. Ce score n'est affiché que dans l'interface — il n'est
+  // jamais envoyé au modèle (pour éviter qu'il le récite).
+  const parDoc = new Map();
+  extraits.forEach(e => {
+    const s = e.scoreHybride ?? e.score ?? 0;
+    if (!parDoc.has(e.docNom) || s > parDoc.get(e.docNom)) parDoc.set(e.docNom, s);
+  });
   const el = document.createElement("div");
   el.className = "sources";
   el.innerHTML = `<span class="sources-label"><i data-lucide="book-open"></i> Sources</span>`
-    + noms.map(n => `<span class="source-chip">${escapeHtml(n)}</span>`).join("");
+    + [...parDoc.entries()].map(([nom, score]) => {
+        const pct = Math.max(0, Math.min(100, Math.round(score * 100)));
+        return `<span class="source-chip">${escapeHtml(nom)}<span class="source-score">${pct}%</span></span>`;
+      }).join("");
   body.appendChild(el);
   refreshIcons();
 }

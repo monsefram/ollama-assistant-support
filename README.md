@@ -26,7 +26,11 @@ Ce dépôt contient l'ensemble du travail réalisé pour le cours de veille tech
 │       ├── 02_demarrage_windows.md
 │       ├── 03_securite_virus.md
 │       ├── 04_maintenance_nettoyage_pc.md
-│       └── 05_chemins_raccourcis_windows.md
+│       ├── 05_chemins_raccourcis_windows.md
+│       ├── 06_imprimante.md
+│       ├── 07_comptes_mots_de_passe.md
+│       ├── 08_son_audio.md
+│       └── 09_navigateur.md
 └── docs/                        → Documentation du projet
     ├── proposition.md           → Proposition de projet initiale
     ├── carte-mentale/           → Carte mentale (.mm et .pdf)

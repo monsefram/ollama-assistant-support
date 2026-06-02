@@ -755,9 +755,16 @@ textarea::placeholder { color: var(--muted); }
 .sources-label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
 .sources-label [data-lucide] { width: 13px; height: 13px; }
 .source-chip {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 11px; font-weight: 500; color: var(--accent-700);
   background: var(--accent-50); border: 1px solid var(--accent-100);
-  border-radius: 999px; padding: 3px 10px;
+  border-radius: 999px; padding: 3px 4px 3px 10px;
+}
+/* Badge de pertinence RAG (affiché dans l'UI seulement, jamais dans le prompt) */
+.source-score {
+  font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: #fff; background: var(--accent); border-radius: 999px;
+  padding: 1px 7px; line-height: 1.5;
 }
 
 /* Fenêtre de gestion */
