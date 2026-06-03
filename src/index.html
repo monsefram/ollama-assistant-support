@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>JARVITO — Assistant de support informatique (local)</title>
 
-  <!-- Typographie : Hanken Grotesk (UI) + JetBrains Mono (signature technique) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Typographie : Hanken Grotesk (UI) + JetBrains Mono (signature technique).
+       Polices servies localement (vendor/) → fonctionne sans connexion Internet. -->
+  <link rel="stylesheet" href="vendor/fonts.css" />
 
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -32,6 +31,11 @@
     <button class="btn-primary" onclick="nouvelleConversation()">
       <i data-lucide="plus"></i> <span>Nouvelle conversation</span>
     </button>
+
+    <!-- Accès au comparateur de modèles (page dédiée) -->
+    <a class="btn-secondary" href="comparateur.html" title="Comparer deux modèles côte à côte">
+      <i data-lucide="columns-2"></i> <span>Comparer des modèles</span>
+    </a>
 
     <!-- Statut de connexion à Ollama -->
     <div class="status" id="status">
@@ -289,12 +293,13 @@
   </div>
 </div>
 
+<!-- Librairies servies localement (vendor/) → aucune dépendance Internet -->
 <!-- Lecture de PDF (Mozilla PDF.js) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="vendor/pdfjs/pdf.min.js"></script>
 <!-- Lecture de DOCX (Mammoth.js) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="vendor/mammoth.browser.min.js"></script>
 <!-- Icônes professionnelles (au trait, sans emoji) -->
-<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="vendor/lucide.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

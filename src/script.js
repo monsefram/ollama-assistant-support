@@ -725,6 +725,7 @@ async function genererReponse(chat, texteUtilisateur) {
           num_ctx: 2048       // fenêtre de contexte réduite : suffisant pour support + RAG
         },
         keep_alive: "30m"     // garde le modèle chargé en RAM entre les requêtes
+      })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -1201,8 +1202,7 @@ function closeKB() { kbOverlay.classList.remove("open"); }
 // Configure PDF.js dès que la lib est chargée.
 window.addEventListener("load", () => {
   if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdfjs/pdf.worker.min.js";
   }
 });
 
@@ -1602,8 +1602,8 @@ function nettoyerPourVoix(t) {
    d'autorisation de quelques minutes pendant laquelle la voix est permise.
    AVERTISSEMENT : prototype éducatif, pas une sécurité biométrique fiable.
    --------------------------------------------------------------------- */
-const FACE_API_CDN = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js";
-const FACE_MODELS  = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
+const FACE_API_CDN = "vendor/face-api.js";
+const FACE_MODELS  = "vendor/face-models";
 const FACE_SEUIL   = 0.5;        // distance max pour considérer un visage identique
 const FACE_DUREE   = 5 * 60000;  // durée d'autorisation : 5 minutes
 

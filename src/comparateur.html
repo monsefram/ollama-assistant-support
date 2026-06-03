@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JARVITO — Comparateur de modèles (local)</title>
+
+  <!-- Typographie servie localement (vendor/) → fonctionne sans connexion Internet. -->
+  <link rel="stylesheet" href="vendor/fonts.css" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="cmp-app">
+
+  <!-- ════════════════ EN-TÊTE ════════════════ -->
+  <header class="topbar cmp-topbar">
+    <div class="cmp-topbar-left">
+      <a class="cmp-back" href="index.html" title="Retour à l'assistant">
+        <i data-lucide="arrow-left"></i>
+      </a>
+      <div class="brand">
+        <div class="brand-mark orb spin"></div>
+        <div class="topbar-title">
+          <h1>Comparateur de modèles</h1>
+          <p>Une même question, deux modèles en parallèle — comparez la qualité et la vitesse.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="topbar-meta">
+      <!-- Base de connaissances (RAG) — comme dans l'assistant -->
+      <div class="cmp-rag">
+        <label class="switch" title="Injecter la base de connaissances dans les deux modèles">
+          <input type="checkbox" id="rag-toggle" checked />
+          <span class="slider"></span>
+        </label>
+        <span class="cmp-rag-label" id="rag-status"><i data-lucide="database"></i> Base de connaissances</span>
+      </div>
+      <div class="status" id="status">
+        <span class="status-dot" id="status-dot"></span>
+        <div class="status-text">
+          <span class="status-label" id="status-label">Vérification…</span>
+          <span class="status-host">localhost:11434</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ════════════════ ARÈNE DE COMPARAISON ════════════════ -->
+  <section class="cmp-stage">
+
+    <!-- Sources RAG communes aux deux modèles (mêmes connaissances injectées) -->
+    <div class="cmp-sources" id="cmp-sources" hidden>
+      <span class="sources-label"><i data-lucide="book-open"></i> Connaissances injectées dans les deux modèles</span>
+      <span class="cmp-sources-chips" id="cmp-sources-chips"></span>
+    </div>
+
+    <div class="cmp-grid">
+
+      <!-- Colonne A -->
+      <article class="cmp-col" id="col-a">
+        <header class="cmp-col-head">
+          <div class="cmp-col-pick">
+            <span class="cmp-tag">Modèle A</span>
+            <div class="select-wrap">
+              <select id="model-a"></select>
+              <i data-lucide="chevron-down"></i>
+            </div>
+          </div>
+          <div class="cmp-stats" id="stats-a">
+            <span class="cmp-stat"><i data-lucide="timer"></i><span id="time-a">—</span></span>
+            <span class="cmp-stat"><i data-lucide="gauge"></i><span id="speed-a">—</span></span>
+            <span class="cmp-stat"><i data-lucide="hash"></i><span id="tok-a">—</span></span>
+          </div>
+        </header>
+        <div class="cmp-output" id="out-a">
+          <div class="cmp-placeholder"><i data-lucide="message-square"></i> En attente d'une question…</div>
+        </div>
+      </article>
+
+      <!-- Colonne B -->
+      <article class="cmp-col" id="col-b">
+        <header class="cmp-col-head">
+          <div class="cmp-col-pick">
+            <span class="cmp-tag">Modèle B</span>
+            <div class="select-wrap">
+              <select id="model-b"></select>
+              <i data-lucide="chevron-down"></i>
+            </div>
+          </div>
+          <div class="cmp-stats" id="stats-b">
+            <span class="cmp-stat"><i data-lucide="timer"></i><span id="time-b">—</span></span>
+            <span class="cmp-stat"><i data-lucide="gauge"></i><span id="speed-b">—</span></span>
+            <span class="cmp-stat"><i data-lucide="hash"></i><span id="tok-b">—</span></span>
+          </div>
+        </header>
+        <div class="cmp-output" id="out-b">
+          <div class="cmp-placeholder"><i data-lucide="message-square"></i> En attente d'une question…</div>
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ════════════════ SAISIE ════════════════ -->
+  <footer class="composer">
+    <div class="composer-box">
+      <textarea id="input" rows="1"
+        placeholder="Posez la même question aux deux modèles…"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button id="send-btn" class="send" onclick="lancerComparaison()" title="Comparer">
+        <i data-lucide="arrow-up"></i>
+      </button>
+    </div>
+    <p class="composer-hint">
+      Les deux modèles reçoivent exactement la même question et les mêmes réglages, sans base de connaissances —
+      pour comparer les modèles seuls. Entrée pour lancer · Maj + Entrée pour une nouvelle ligne.
+    </p>
+  </footer>
+
+</div>
+
+<!-- Notification temporaire (toast) -->
+<div class="toast" id="toast"></div>
+
+<!-- Icônes professionnelles servies localement (vendor/) -->
+<script src="vendor/lucide.min.js"></script>
+<!-- Moteur RAG partagé (lecture de la base de connaissances de l'assistant) -->
+<script src="rag.js"></script>
+<script src="comparateur.js"></script>
+</body>
+</html>

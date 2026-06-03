@@ -19,8 +19,18 @@ Ce dépôt contient l'ensemble du travail réalisé pour le cours de veille tech
 ├── README.md                    → Ce fichier
 ├── src/                         → Code source de l'interface web
 │   ├── index.html               → Structure de la page (JARVITO)
+│   ├── comparateur.html         → Comparateur de modèles côte à côte
 │   ├── style.css                → Thème visuel
 │   ├── script.js                → Logique : chat, RAG, voix, Face ID
+│   ├── rag.js                   → Moteur RAG partagé (lecture de la base)
+│   ├── comparateur.js           → Logique du comparateur (2 modèles en parallèle)
+│   ├── vendor/                  → Librairies et polices servies localement (hors ligne)
+│   │   ├── fonts.css + fonts/   → Polices Hanken Grotesk + JetBrains Mono
+│   │   ├── lucide.min.js        → Icônes
+│   │   ├── pdfjs/               → Lecture des PDF importés
+│   │   ├── mammoth.browser.min.js → Lecture des DOCX importés
+│   │   ├── face-api.js          → Prototype Face ID
+│   │   └── face-models/         → Modèles de reconnaissance faciale
 │   └── connaissances/           → Documents pour la base de connaissances RAG
 │       ├── 01_reseau_wifi_windows.md
 │       ├── 02_demarrage_windows.md
@@ -49,6 +59,11 @@ Ce dépôt contient l'ensemble du travail réalisé pour le cours de veille tech
 npx -y serve "src" -p 3000
 # puis ouvrir http://localhost:3000
 ```
+
+> **Fonctionne 100 % hors ligne.** Toutes les librairies et polices sont servies
+> depuis `src/vendor/` : aucune connexion Internet n'est requise. Le projet ne
+> dépend que d'Ollama tournant en local (`localhost:11434`). Aucune donnée ne
+> quitte la machine.
 
 ---
 
