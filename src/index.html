@@ -191,7 +191,7 @@
         <i data-lucide="shield-check"></i> Vérifier mon visage
       </button>
       <button class="btn-modal ghost" onclick="lockEnregistrer()">
-        <i data-lucide="user-plus"></i> Enregistrer
+        <i data-lucide="user-plus"></i> Ajouter un échantillon
       </button>
     </div>
     <button class="lock-skip" onclick="lockSkip()">Ignorer et continuer</button>
@@ -212,6 +212,17 @@
 
 <!-- Notification temporaire (toast) -->
 <div class="toast" id="toast"></div>
+
+<!-- Animation de succès Face ID (visage reconnu) -->
+<div class="face-success" id="face-success" aria-hidden="true">
+  <div class="fs-card">
+    <svg class="fs-check" viewBox="0 0 52 52" aria-hidden="true">
+      <circle class="fs-circle" cx="26" cy="26" r="24" />
+      <path class="fs-tick" d="M14 27 l8 8 l16 -16" />
+    </svg>
+    <div class="fs-text">Visage vérifié avec succès</div>
+  </div>
+</div>
 
 <!-- ════════════════ BASE DE CONNAISSANCES (RAG) ════════════════ -->
 <div class="kb-overlay" id="kb-overlay">
@@ -278,12 +289,20 @@
         peut être trompée par une simple photo. À ne jamais utiliser pour protéger de
         vraies données.
       </p>
+      <p class="face-note face-calib">
+        <b>Calibration :</b> pour que ça marche dans n'importe quelle lumière,
+        enregistre plusieurs échantillons (3 ou plus) en variant l'éclairage et
+        l'angle du visage. À la vérification, l'empreinte la plus proche est utilisée.
+      </p>
       <div class="face-actions">
         <button class="btn-modal ghost" id="face-cam-btn" onclick="basculerCamera()">
           <i data-lucide="video"></i> Activer la caméra
         </button>
         <button class="btn-modal ghost" onclick="enregistrerVisage()">
-          <i data-lucide="user-plus"></i> Enregistrer mon visage
+          <i data-lucide="user-plus"></i> Ajouter un échantillon
+        </button>
+        <button class="btn-modal ghost" onclick="reinitialiserVisage()" title="Supprimer tous les échantillons">
+          <i data-lucide="rotate-ccw"></i> Réinitialiser
         </button>
         <button class="btn-modal primary" onclick="verifierVisage()">
           <i data-lucide="shield-check"></i> Vérifier

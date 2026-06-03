@@ -126,7 +126,7 @@ let state = {
   kb: { docs: [], chunks: [], embeddings: false }, // base de connaissances
   lectureVoix: false, // lire les réponses à voix haute
   voixNom: "",        // nom de la voix de synthèse choisie
-  faceId: { actif: false, descripteur: null } // Face ID (prototype)
+  faceId: { actif: false, descripteurs: [] } // Face ID (prototype) — plusieurs empreintes (calibration multi-éclairage)
 };
 
 let enCours = false;  // true pendant une génération
@@ -1399,9 +1399,11 @@ async function effacerChatActif() {
    15. ASSISTANT VOCAL (Web Speech API)
    - Reconnaissance vocale : SpeechRecognition (voix -> texte)
    - Synthèse vocale       : SpeechSynthesis  (texte -> voix)
-   Note : dans Chrome, la reconnaissance vocale transite par les serveurs
-   de Google. Elle n'est donc pas 100 % locale (à signaler dans le rapport).
-   La synthèse vocale, elle, est exécutée localement.
+   Note : dans Chrome, la reconnaissance vocale (micro) transite par les
+   serveurs de Google — elle n'est donc pas 100 % locale (à signaler dans le
+   rapport). La synthèse vocale (lecture) peut, elle, utiliser une voix LOCALE
+   ou une voix RÉSEAU selon le choix : on privilégie toujours une voix locale
+   pour que la lecture fonctionne hors-ligne, avec repli automatique.
    --------------------------------------------------------------------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null;
@@ -1413,14 +1415,16 @@ const ttsToggle   = document.getElementById("tts-toggle");
 const voiceStatus = document.getElementById("voice-status");
 const voiceSelect = document.getElementById("voice-select");
 
-/* Classe les voix françaises de la plus naturelle à la plus robotique. */
+/* Classe les voix françaises. Priorité ABSOLUE aux voix locales : elles
+   fonctionnent hors-ligne, contrairement aux voix réseau ("Google français",
+   "...Online") qui échouent sans connexion. */
 function scoreVoix(v) {
   const n = v.name.toLowerCase();
   let s = 0;
-  if (n.includes("natural")) s += 5;   // voix neuronales (Edge) — les plus naturelles
-  if (n.includes("online"))  s += 3;
-  if (n.includes("google"))  s += 2;   // "Google français" — naturelle (Chrome)
-  if (n.includes("microsoft")) s += 1;
+  if (v.localService) s += 10;          // voix locale → marche hors-ligne (priorité)
+  if (n.includes("natural")) s += 3;    // voix neuronales — les plus naturelles
+  if (n.includes("microsoft")) s += 2;
+  if (n.includes("google")) s += 1;
   return s;
 }
 
@@ -1432,14 +1436,21 @@ function chargerVoix() {
     voiceSelect.innerHTML = `<option>Aucune voix française disponible</option>`;
     return;
   }
-  voix.sort((a, b) => scoreVoix(b) - scoreVoix(a)); // la plus naturelle en premier
+  voix.sort((a, b) => scoreVoix(b) - scoreVoix(a)); // voix locales puis plus naturelles
   voiceSelect.innerHTML = voix
-    .map(v => `<option value="${escapeHtml(v.name)}">${escapeHtml(v.name)}</option>`).join("");
+    .map(v => {
+      const tag = v.localService ? " · locale" : " · en ligne";
+      return `<option value="${escapeHtml(v.name)}">${escapeHtml(v.name)}${tag}</option>`;
+    }).join("");
 
-  // Restaure le choix sauvegardé, sinon prend la meilleure voix.
-  const choisi = (state.voixNom && voix.some(v => v.name === state.voixNom)) ? state.voixNom : voix[0].name;
-  voiceSelect.value = choisi;
-  state.voixNom = choisi;
+  // Choix par défaut : on privilégie une voix LOCALE (fonctionne hors-ligne).
+  // Si la voix sauvegardée n'existe plus OU est une voix réseau, on bascule
+  // automatiquement sur la meilleure voix locale → la lecture marche toujours.
+  const sauvee  = voix.find(v => v.name === state.voixNom);
+  const choix   = (sauvee && sauvee.localService) ? sauvee
+                : (voix.find(v => v.localService) || voix[0]);
+  voiceSelect.value = choix.name;
+  state.voixNom = choix.name;
 }
 
 function initVoix() {
@@ -1528,7 +1539,27 @@ function arreterEcoute() {
   hintEl.classList.remove("listening");
 }
 
-/* Lit un texte à voix haute (synthèse vocale locale). */
+/* Construit un énoncé prêt à lire (texte nettoyé + voix + réglages naturels). */
+function construireEnonce(texteNettoye, voix) {
+  const u = new SpeechSynthesisUtterance(texteNettoye);
+  if (voix) { u.voice = voix; u.lang = voix.lang; } else { u.lang = "fr-CA"; }
+  u.rate = 1.0;   // débit posé
+  u.pitch = 1.0;  // hauteur neutre
+  return u;
+}
+
+/* Meilleure voix française STRICTEMENT locale (filet de sécurité hors-ligne). */
+function voixLocaleFr() {
+  const voix = speechSynthesis.getVoices();
+  return voix.filter(v => v.localService && v.lang && v.lang.toLowerCase().startsWith("fr"))
+             .sort((a, b) => scoreVoix(b) - scoreVoix(a))[0]
+      || voix.filter(v => v.localService).sort((a, b) => scoreVoix(b) - scoreVoix(a))[0]
+      || null;
+}
+
+/* Lit un texte à voix haute (synthèse vocale). Si la voix choisie échoue
+   (typiquement une voix réseau utilisée hors-ligne), on réessaie une fois
+   avec une voix locale garantie. */
 function parler(texte) {
   if (!window.speechSynthesis) return;
 
@@ -1539,12 +1570,14 @@ function parler(texte) {
   }
 
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(nettoyerPourVoix(texte));
-  const voix = choisirVoix();
-  if (voix) { u.voice = voix; u.lang = voix.lang; } else { u.lang = "fr-CA"; }
-  // Réglages pour un rendu plus naturel (débit posé, hauteur neutre).
-  u.rate = 1.0;
-  u.pitch = 1.0;
+  const texteNettoye = nettoyerPourVoix(texte);
+  const u = construireEnonce(texteNettoye, choisirVoix());
+  u.onerror = () => {
+    const locale = voixLocaleFr();
+    if (!locale || (u.voice && locale.name === u.voice.name)) return; // rien de mieux à proposer
+    speechSynthesis.cancel();
+    speechSynthesis.speak(construireEnonce(texteNettoye, locale));
+  };
   speechSynthesis.speak(u);
 }
 
@@ -1560,9 +1593,14 @@ function choisirVoix() {
 function apercuVoix() {
   if (!window.speechSynthesis) return;
   speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance("Bonjour, je suis votre assistant de support informatique.");
-  const voix = choisirVoix();
-  if (voix) { u.voice = voix; u.lang = voix.lang; }
+  const phrase = "Bonjour, je suis votre assistant de support informatique.";
+  const u = construireEnonce(phrase, choisirVoix());
+  u.onerror = () => {
+    const locale = voixLocaleFr();
+    if (!locale || (u.voice && locale.name === u.voice.name)) return;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(construireEnonce(phrase, locale));
+  };
   speechSynthesis.speak(u);
 }
 
@@ -1576,13 +1614,23 @@ function parlerAsync(texte) {
       resolve(); return;
     }
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(nettoyerPourVoix(texte));
-    const voix = choisirVoix();
-    if (voix) { u.voice = voix; u.lang = voix.lang; } else { u.lang = "fr-CA"; }
-    u.rate = 1.0; u.pitch = 1.0;
-    u.onend = resolve;
-    u.onerror = resolve;
-    speechSynthesis.speak(u);
+    const texteNettoye = nettoyerPourVoix(texte);
+    let reessaye = false;
+    const lancer = voix => {
+      const u = construireEnonce(texteNettoye, voix);
+      u.onend = resolve;
+      u.onerror = () => {
+        // Repli une seule fois vers une voix locale, sinon on résout.
+        if (reessaye) { resolve(); return; }
+        reessaye = true;
+        const locale = voixLocaleFr();
+        if (!locale || (voix && locale.name === voix.name)) { resolve(); return; }
+        speechSynthesis.cancel();
+        lancer(locale);
+      };
+      speechSynthesis.speak(u);
+    };
+    lancer(choisirVoix());
   });
 }
 
@@ -1624,7 +1672,7 @@ function initFaceId() {
     state.faceId.actif = faceToggle.checked;
     sauver();
     majFaceStatus();
-    if (state.faceId.actif && !state.faceId.descripteur) {
+    if (state.faceId.actif && !aDesEmpreintes()) {
       toast("Activez la caméra et enregistrez votre visage dans la fenêtre Face ID.");
       openFace();
     }
@@ -1633,10 +1681,45 @@ function initFaceId() {
 
 function faceAutorise() { return Date.now() < faceAutoriseJusqua; }
 
+/* ---- Calibration multi-empreintes ----
+   Le visage est enregistré sous PLUSIEURS conditions (éclairage, angle).
+   On stocke une liste d'empreintes 128D et, à la vérification, on retient la
+   distance la PLUS PETITE : tant qu'une seule empreinte de référence est
+   proche, le visage est reconnu — ce qui rend le système robuste à la lumière. */
+
+/* Renvoie la liste des empreintes de référence, en migrant l'ancien format
+   (un seul `descripteur`) vers le nouveau (`descripteurs`), une fois pour toutes. */
+function faceRefs() {
+  const f = state.faceId;
+  if (!Array.isArray(f.descripteurs)) f.descripteurs = [];
+  if (f.descripteur) {            // ancienne sauvegarde : une seule empreinte
+    f.descripteurs.push(f.descripteur);
+    delete f.descripteur;
+    sauver();
+  }
+  return f.descripteurs;
+}
+
+/* Au moins une empreinte enregistrée ? */
+function aDesEmpreintes() { return faceRefs().length > 0; }
+
+/* Distance euclidienne minimale entre un descripteur et toutes les empreintes
+   de référence. Plus la valeur est petite, plus le visage ressemble. */
+function distanceMin(d) {
+  let min = Infinity;
+  for (const r of faceRefs()) {
+    const dist = faceapi.euclideanDistance(d, Float32Array.from(r));
+    if (dist < min) min = dist;
+  }
+  return min;
+}
+
 function majFaceStatus() {
   if (!state.faceId.actif) { faceStatus.textContent = "Désactivé"; return; }
-  if (!state.faceId.descripteur) { faceStatus.textContent = "Aucun visage enregistré"; return; }
-  faceStatus.textContent = faceAutorise() ? "Visage vérifié" : "Vérification requise";
+  const n = faceRefs().length;
+  if (!n) { faceStatus.textContent = "Aucun visage enregistré"; return; }
+  const ech = `${n} échantillon${n > 1 ? "s" : ""}`;
+  faceStatus.textContent = faceAutorise() ? `Visage vérifié · ${ech}` : `${ech} · vérification requise`;
 }
 
 function openFace()  { faceOverlay.classList.add("open"); refreshIcons(); }
@@ -1645,6 +1728,19 @@ function closeFace() { faceOverlay.classList.remove("open"); arreterCamera(); }
 function setBadge(texte, type = "") {
   faceBadge.className = "face-badge" + (type ? " " + type : "");
   faceBadge.textContent = texte;
+}
+
+/* Joue l'animation plein écran « Visage vérifié avec succès » (cercle + coche).
+   On retire puis on rajoute la classe (avec un reflow) pour pouvoir la rejouer. */
+function animationSucces(message = "Visage vérifié avec succès") {
+  const el = document.getElementById("face-success");
+  if (!el) return;
+  el.querySelector(".fs-text").textContent = message;
+  el.classList.remove("show");
+  void el.offsetWidth;                 // force un reflow → l'animation repart de zéro
+  el.classList.add("show");
+  clearTimeout(animationSucces._t);
+  animationSucces._t = setTimeout(() => el.classList.remove("show"), 2300);
 }
 
 /* Charge la librairie + les modèles une seule fois, à la demande. */
@@ -1709,28 +1805,46 @@ async function descripteurActuel() {
   return d;
 }
 
-/* Enregistre le visage de référence (utilisateur de confiance). */
+/* Ajoute un échantillon du visage de référence (calibration).
+   On appelle cette fonction plusieurs fois, dans des conditions différentes
+   (lumière de face, de côté, plus faible, tête légèrement tournée). */
 async function enregistrerVisage() {
   const d = await descripteurActuel();
   if (!d) return;
-  state.faceId.descripteur = Array.from(d);
+  faceRefs().push(Array.from(d));
   sauver();
-  setBadge("Visage enregistré", "ok");
+  const n = faceRefs().length;
+  setBadge(`Échantillon ${n} enregistré`, "ok");
   majFaceStatus();
-  toast("Visage de référence enregistré.");
+  toast(n < 3
+    ? `Échantillon ${n} ajouté. Changez l'éclairage ou l'angle, puis recommencez (3+ recommandés).`
+    : `Échantillon ${n} ajouté. La calibration est de plus en plus robuste.`);
+}
+
+/* Supprime tous les échantillons enregistrés (recommencer la calibration). */
+async function reinitialiserVisage() {
+  if (!aDesEmpreintes()) { toast("Aucun échantillon à supprimer."); return; }
+  if (!await demanderConfirmation("Réinitialiser la calibration",
+      "Tous les échantillons de visage enregistrés seront supprimés.")) return;
+  state.faceId.descripteurs = [];
+  delete state.faceId.descripteur;
+  sauver();
+  setBadge("Calibration réinitialisée");
+  majFaceStatus();
+  toast("Calibration réinitialisée. Enregistrez de nouveaux échantillons.");
 }
 
 /* Vérifie le visage filmé contre le visage enregistré. */
 async function verifierVisage() {
-  if (!state.faceId.descripteur) { toast("Enregistrez d'abord votre visage."); return; }
+  if (!aDesEmpreintes()) { toast("Enregistrez d'abord votre visage."); return; }
   const d = await descripteurActuel();
   if (!d) return;
-  const reference = Float32Array.from(state.faceId.descripteur);
-  const distance = faceapi.euclideanDistance(d, reference);
+  const distance = distanceMin(d);   // plus proche empreinte parmi tous les échantillons
   if (distance < FACE_SEUIL) {
     faceAutoriseJusqua = Date.now() + FACE_DUREE;
     setBadge("Visage reconnu — accès autorisé", "ok");
     majFaceStatus();
+    animationSucces();
     toast("Visage reconnu. Réponse vocale autorisée pour 5 minutes.");
   } else {
     faceAutoriseJusqua = 0;
@@ -1788,18 +1902,19 @@ async function lockEnregistrer() {
   lockBadge("Analyse du visage…", "scan");
   const d = await detecterDescripteurSur(lockVideo);
   if (!d) { lockBadge("Aucun visage détecté", "fail"); return; }
-  state.faceId.descripteur = Array.from(d);
+  faceRefs().push(Array.from(d));
   state.faceId.actif = true;
   sauver();
   faceToggle.checked = true;
   majFaceStatus();
-  lockBadge("Visage enregistré — cliquez sur Vérifier", "ok");
-  toast("Visage enregistré.");
+  const n = faceRefs().length;
+  lockBadge(`Échantillon ${n} enregistré — variez la lumière puis recommencez, ou Vérifiez`, "ok");
+  toast(`Échantillon ${n} enregistré.`);
 }
 
 /* Vérifie le visage et déverrouille si reconnu. */
 async function lockVerifier() {
-  if (!state.faceId.descripteur) {
+  if (!aDesEmpreintes()) {
     lockBadge("Aucun visage enregistré", "fail");
     toast("Aucun visage enregistré. Cliquez d'abord sur Enregistrer.");
     return;
@@ -1810,13 +1925,13 @@ async function lockVerifier() {
   lockBadge("Analyse du visage…", "scan");
   const d = await detecterDescripteurSur(lockVideo);
   if (!d) { lockBadge("Aucun visage détecté", "fail"); return; }
-  const reference = Float32Array.from(state.faceId.descripteur);
-  const distance = faceapi.euclideanDistance(d, reference);
+  const distance = distanceMin(d);   // plus proche empreinte parmi tous les échantillons
   if (distance < FACE_SEUIL) {
     faceAutoriseJusqua = Date.now() + FACE_DUREE;
     majFaceStatus();
     lockBadge("Visage reconnu", "ok");
     deverrouiller();
+    animationSucces();
     toast("Bienvenue. Visage reconnu.");
   } else {
     lockBadge("Visage non reconnu", "fail");

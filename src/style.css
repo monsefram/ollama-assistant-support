@@ -726,7 +726,79 @@ textarea::placeholder { color: var(--muted); }
   background: var(--surface-2); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 11px 13px;
 }
+/* Note de calibration : mise en avant douce avec l'accent du thème */
+.face-calib {
+  background: var(--accent-50); border-color: var(--accent-100); color: var(--text-2);
+  margin-top: 8px;
+}
+.face-calib b { color: var(--accent-700); }
 .face-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+
+/* =====================================================================
+   ANIMATION DE SUCCÈS FACE ID (visage reconnu)
+   Cercle + coche qui se dessinent, carte qui apparaît, texte qui monte.
+   ===================================================================== */
+.face-success {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(13,18,30,0.40);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+}
+.face-success.show { opacity: 1; }
+
+.fs-card {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 34px 44px;
+  box-shadow: var(--shadow-lg);
+  transform: scale(0.85);
+  transition: transform 0.35s cubic-bezier(0.2,0.9,0.3,1.25);
+}
+.face-success.show .fs-card { transform: scale(1); }
+
+.fs-check { width: 88px; height: 88px; }
+.fs-circle {
+  fill: none; stroke: var(--green); stroke-width: 3;
+  stroke-dasharray: 151; stroke-dashoffset: 151;   /* circonférence ≈ 2·π·24 */
+}
+.fs-tick {
+  fill: none; stroke: var(--green); stroke-width: 4.5;
+  stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 40; stroke-dashoffset: 40;
+}
+.face-success.show .fs-circle { animation: fsCircle 0.5s ease forwards; }
+.face-success.show .fs-tick   { animation: fsTick 0.35s 0.45s ease forwards; }
+@keyframes fsCircle { to { stroke-dashoffset: 0; } }
+@keyframes fsTick   { to { stroke-dashoffset: 0; } }
+
+/* Petite onde verte qui se propage derrière la coche */
+.fs-check::after { content: none; }
+.face-success.show .fs-card::before {
+  content: ""; position: absolute; width: 88px; height: 88px;
+  border-radius: 50%; background: var(--green);
+  opacity: 0.25; animation: fsPulse 0.9s 0.4s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes fsPulse {
+  from { transform: scale(0.6); opacity: 0.35; }
+  to   { transform: scale(1.9); opacity: 0; }
+}
+.fs-card { position: relative; }
+
+.fs-text {
+  font-size: 16px; font-weight: 700; color: var(--text); letter-spacing: -0.01em;
+  opacity: 0; transform: translateY(6px);
+}
+.face-success.show .fs-text { animation: fsText 0.4s 0.55s ease forwards; }
+@keyframes fsText { to { opacity: 1; transform: translateY(0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fs-card, .fs-circle, .fs-tick, .fs-text, .face-success.show .fs-card::before {
+    animation: none !important; transition: none !important;
+    stroke-dashoffset: 0 !important; opacity: 1 !important; transform: none !important;
+  }
+}
 .face-actions .btn-modal { display: flex; align-items: center; gap: 6px; }
 .face-actions .btn-modal [data-lucide] { width: 15px; height: 15px; }
 
