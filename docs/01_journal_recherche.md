@@ -49,6 +49,39 @@ Ces constats viennent de tests réels faits pendant le développement de l'inter
 
 ---
 
+## Migration vers un serveur GPU distant (Vast.ai) — 2026-06-03
+
+**Le problème de départ.** Mon PC n'a pas de GPU dédié (seulement une puce graphique intégrée Intel UHD), donc Ollama tourne sur le processeur. Résultat : entre 5 et 8 minutes pour une réponse avec qwen2.5:7b. C'est inutilisable pour une démonstration. J'ai cherché une solution sans acheter de matériel, vu que je ne m'en sers que 2-3 h par jour.
+
+**Le choix de l'approche.** J'ai comparé trois pistes :
+- **Google Colab** (gratuit / Pro ~10 $/mois) : pas cher, mais éphémère (tout s'efface à chaque session), pas conçu pour servir un modèle, et il faut un tunnel dont l'adresse change à chaque fois. Bon pour tester, pas pour un usage régulier.
+- **Google Compute Engine / serveur loué au mois** : trop cher pour 2-3 h/jour.
+- **GPU à l'heure, à la demande (Vast.ai, RunPod)** : on ne paie que quand on l'utilise. C'est le modèle qui correspond exactement à mon usage. J'ai choisi **Vast.ai** pour le prix.
+
+**La machine louée.** Un **RTX 5060 Ti (16 Go de VRAM)** en datacenter, à **0,276 $/h**, fiabilité 99,7 %. 16 Go suffisent largement pour un modèle 7B. À ce tarif, mes 2-3 h/jour reviennent à environ 20-25 $/mois, et seulement les jours où je m'en sers.
+
+**Les étapes que j'ai suivies :**
+1. **Clé SSH.** Générée sur mon PC avec `ssh-keygen -t ed25519`, puis j'ai collé la clé **publique** dans Vast (Account → SSH Keys).
+2. **Template.** J'ai pris le template **Ollama** de Vast (il lance le serveur Ollama tout seul et inclut le SSH).
+3. **Connexion par tunnel SSH.** C'est l'astuce clé : au lieu d'exposer Ollama sur Internet, je crée un tunnel qui fait croire à mon interface qu'Ollama tourne en local. Comme ça, **aucune ligne de code à changer** — mon interface vise toujours `localhost:11434` :
+   ```
+   ssh -p <port> root@<hote>.vast.ai -L 11434:localhost:11434
+   ```
+4. **Problème de DNS.** Le `ollama pull` échouait (`lookup registry.ollama.ai ... i/o timeout`) : le DNS du conteneur ne répondait pas. Je l'ai remplacé par un DNS public :
+   ```
+   echo "nameserver 8.8.8.8" > /etc/resolv.conf
+   echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+   ```
+5. **Téléchargement des modèles** sur le serveur : `ollama pull qwen2.5:7b` et `ollama pull nomic-embed-text` (rapide, l'internet du serveur est à plusieurs Gbps).
+6. **Lancement de l'interface** sur mon PC, tunnel ouvert : `npx -y serve "src" -p 3000`. *(Au passage, PowerShell bloquait l'exécution de `npx.ps1` ; contourné avec `npx.cmd` ou en autorisant les scripts avec `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.)*
+7. **Arrêt des frais.** Très important : à la fin, je fais **Destroy** sur l'instance pour ne plus rien payer. Comme mes conversations et ma base RAG sont stockées dans le navigateur (sur MON PC), je ne perds rien : la prochaine fois, je recrée une instance et je refais le `pull` en une minute.
+
+**Le résultat.** On passe de **~5-8 minutes** par réponse (mon CPU) à **quelques secondes** sur le GPU. Énorme différence, et ça me permettrait même de tester des modèles plus gros.
+
+**Le compromis à assumer (important pour le rapport).** En passant sur un serveur loué, je ne peux plus dire « 100 % local, aucune donnée ne quitte ma machine » : mes questions et le contexte RAG sont envoyés au serveur. La formulation honnête devient « **auto-hébergé sur un serveur privé que je contrôle** », ce qui reste très différent d'un service tiers type ChatGPT. C'est un arbitrage classique **confidentialité ↔ performance** : je peux garder les deux modes (PC en local pour la confidentialité totale, GPU distant pour la vitesse) et les présenter comme un choix selon le besoin.
+
+---
+
 ## Pistes d'amélioration identifiées (2026-05-31)
 
 Ces pistes découlent des tests effectués sur l'interface. Elles montrent que le projet est vivant et qu'on a identifié des problèmes réels avec des solutions concrètes.

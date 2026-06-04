@@ -21,7 +21,7 @@
 (function () {
   "use strict";
 
-  const OLLAMA_URL  = "http://localhost:11434";
+  const OLLAMA_URL  = "http://localhost:11435"; // tunnel SSH vers le serveur GPU (cf. script.js)
   const STORE_KEY   = "support-ia-v1";
   const EMBED_MODEL = "nomic-embed-text:latest";
   const TOP_K       = 2;

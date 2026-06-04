@@ -7,13 +7,13 @@
    nombre de tokens. Objectif pédagogique : comparer concrètement la
    qualité et la rapidité de plusieurs modèles sur le même matériel.
 
-   Tout est 100 % local (http://localhost:11434). Aucune donnée n'est
-   envoyée en ligne.
+   Ollama est joint via le port 11435 (tunnel SSH vers le serveur GPU), pour
+   ne pas entrer en conflit avec un éventuel Ollama local sur le 11434.
    ===================================================================== */
 
 "use strict";
 
-const OLLAMA_URL = "http://localhost:11434";
+const OLLAMA_URL = "http://localhost:11435"; // tunnel SSH vers le serveur GPU (cf. script.js)
 
 /* Même esprit que l'assistant principal : on garde le même system prompt et
    les mêmes réglages d'inférence pour que la comparaison soit honnête (seul
