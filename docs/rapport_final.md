@@ -144,11 +144,12 @@ C'est le cœur expérimental de mon projet, et c'est là que j'ai fait le plus d
 
 J'ai d'abord comparé plusieurs modèles sur la même question de support (« mon ordinateur est lent depuis une mise à jour ») :
 
-| Modèle | Taille | Observation |
-|---|---|---|
-| Llama 3.2 | 3B | **Invente** des chemins de menus Windows qui n'existent pas |
-| Mistral 7B | 7B | Étapes correctes et réalistes |
-| Qwen2.5 | 7B | Le meilleur suivi des consignes, peu d'hallucinations |
+| Modèle     | Taille | Observation                                                 |
+| ---------- | ------ | ----------------------------------------------------------- |
+| Llama 3.2  | 3B     | **Invente** des chemins de menus Windows qui n'existent pas |
+| Mistral 7B | 7B     | Étapes correctes et réalistes                               |
+| Qwen2.5    | 7B     | Le meilleur suivi des consignes, peu d'hallucinations       |
+| Qwen2.5    | 12B    | Très fort mais a besoin de GPU                              |
 
 **Conclusion :** un modèle 3B hallucine les interfaces logicielles même avec une bonne base RAG. La taille a un impact direct sur la fiabilité. J'ai retenu **qwen2.5:7b** comme modèle principal.
 
@@ -264,27 +265,41 @@ Mon projet montre que l'avenir des outils IA n'est pas forcément dans le « tou
 
 ## 10. Références
 
-> Les références suivent le format **IEEE**. Les fiches complètes de chaque source (fiabilité, résumé, limites, justification de la pertinence) se trouvent dans [02_sources_detaillees.md](02_sources_detaillees.md).
+[1]
 
-[1] Ollama, "API documentation," *Ollama*, GitHub repository. [Online]. Available: https://github.com/ollama/ollama/blob/main/docs/api.md. [Accessed: Jun. 4, 2026].
+“ollama/docs/api.md at main · ollama/ollama,” _GitHub_. https://github.com/ollama/ollama/blob/main/docs/api.md
 
-[2] Ollama, "FAQ," *Ollama Documentation*. [Online]. Available: https://docs.ollama.com/faq. [Accessed: Jun. 4, 2026].
+[2]
 
-[3] National Institute of Standards and Technology, "AI Risk Management Framework," NIST. [Online]. Available: https://www.nist.gov/itl/ai-risk-management-framework. [Accessed: Jun. 4, 2026].
+“Ollama Documentation,” _Ollama.com_, 2025. https://docs.ollama.com/faq
 
-[4] National Institute of Standards and Technology, "Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile," NIST. [Online]. Available: https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence. [Accessed: Jun. 4, 2026].
+[3]
 
-[5] OWASP, "OWASP Top 10 for LLM Applications 2025," *OWASP Foundation*, 2025. [Online]. Available: https://genai.owasp.org/llm-top-10/. [Accessed: Jun. 4, 2026].
+National Institute of Standards and Technology, “AI Risk Management Framework,” _NIST_, Jul. 12, 2023. https://www.nist.gov/itl/ai-risk-management-framework
 
-[6] Meta, "Llama 3.2 model card," *Meta*, GitHub repository. [Online]. Available: https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/MODEL_CARD.md. [Accessed: Jun. 4, 2026].
+[4]
 
-[7] Mistral AI, "Announcing Mistral 7B," *Mistral AI*, Sep. 27, 2023. [Online]. Available: https://mistral.ai/news/announcing-mistral-7b. [Accessed: Jun. 4, 2026].
+NIST, “Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile,” _Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile_, Jul. 2024, doi: https://doi.org/10.6028/nist.ai.600-1.
 
-[8] IBM, "What are AI hallucinations?," *IBM Think*. [Online]. Available: https://www.ibm.com/think/topics/ai-hallucinations. [Accessed: Jun. 4, 2026].
+[5]
 
-[9] Universitat d'Andorra, "Local LLMs: Safeguarding data privacy in the age of generative AI — A case study at the University of Andorra," *ResearchGate*, 2024. [Online]. Available: https://www.researchgate.net/publication/386388005. [Accessed: Jun. 4, 2026].
+OWASP, “LLMRisks -,” _OWASP Top 10 for LLM & Generative AI Security_, Apr. 10, 2024. https://genai.owasp.org/llm-top-10/
 
-[10] Y. Gao et al., "Retrieval-augmented generation for large language models: A survey," *arXiv*:2312.10997, Dec. 2023. [Online]. Available: https://arxiv.org/abs/2312.10997. [Accessed: Jun. 4, 2026].
+[6]
+
+“llama-models/models/llama3_2/MODEL_CARD.md at main · meta-llama/llama-models,” _GitHub_, 2024. https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/MODEL_CARD.md
+
+[7]
+
+Mistral AI, “Mistral 7B,” _mistral.ai_, Sep. 27, 2023. https://mistral.ai/news/announcing-mistral-7b/
+
+[8]
+
+IBM, “What Are AI Hallucinations?,” _IBM_, Sep. 01, 2023. https://www.ibm.com/think/topics/ai-hallucinations
+
+[9]
+
+A. Dorca Josa and M. Bleda-Bejar, “LOCAL LLMS: SAFEGUARDING DATA PRIVACY IN THE AGE OF GENERATIVE AI. A CASE STUDY AT THE UNIVERSITY OF ANDORRA,” _ICERI Proceedings_, vol. 1, pp. 7879–7888, Nov. 2024, doi: https://doi.org/10.21125/iceri.2024.1931.
 
 ---
 
