@@ -135,6 +135,7 @@ let state = {
 
 let enCours = false;  // true pendant une génération
 
+/* Charge l'état sauvegardé (conversations, réglages…) depuis localStorage. */
 function charger() {
   try {
     const brut = localStorage.getItem(STORE_KEY);
@@ -145,6 +146,7 @@ function charger() {
     }
   } catch { /* sauvegarde corrompue : on repart à zéro */ }
 }
+/* Enregistre tout l'état dans localStorage (appelée après chaque changement). */
 function sauver() {
   localStorage.setItem(STORE_KEY, JSON.stringify(state));
 }
@@ -187,6 +189,8 @@ const kbStatusEl   = document.getElementById("kb-status");
 let modalResolve = null;
 let modalGetValue = () => true;
 
+/* Ouvre la fenêtre modale et renvoie une Promise résolue à la fermeture
+   (avec la valeur saisie, ou null si annulé). Base de toutes les boîtes de dialogue. */
 function openModal({ title, body, okLabel = "Confirmer", danger = false, getValue, focusSel }) {
   modalTitle.textContent = title;
   modalBody.innerHTML = body;
@@ -201,11 +205,13 @@ function openModal({ title, body, okLabel = "Confirmer", danger = false, getValu
   }
   return new Promise(res => { modalResolve = res; });
 }
+/* Ferme la modale et transmet la valeur au code qui attendait la Promise. */
 function fermerModal(val) {
   modalOverlay.classList.remove("open");
   if (modalResolve) { modalResolve(val); modalResolve = null; }
 }
 
+/* Demande une saisie texte à l'utilisateur (remplace prompt()). */
 function demanderTexte(title, placeholder = "", value = "") {
   return openModal({
     title,
@@ -218,6 +224,7 @@ function demanderTexte(title, placeholder = "", value = "") {
     }
   });
 }
+/* Demande une confirmation oui/non (remplace confirm()). Bouton rouge "danger". */
 function demanderConfirmation(title, message, okLabel = "Supprimer") {
   return openModal({
     title,
@@ -226,6 +233,7 @@ function demanderConfirmation(title, message, okLabel = "Supprimer") {
     getValue: () => true
   });
 }
+/* Demande de choisir une option dans une liste déroulante. */
 function demanderChoix(title, options, courant, okLabel = "Déplacer") {
   const opts = options.map(o =>
     `<option value="${escapeHtml(o.value)}" ${o.value === courant ? "selected" : ""}>${escapeHtml(o.label)}</option>`
@@ -238,6 +246,7 @@ function demanderChoix(title, options, courant, okLabel = "Déplacer") {
   });
 }
 
+/* Affiche une petite notification temporaire en bas de l'écran (2,2 s). */
 function toast(message) {
   toastEl.textContent = message;
   toastEl.classList.add("show");
@@ -307,12 +316,16 @@ window.addEventListener("DOMContentLoaded", () => {
   refreshIcons();
 });
 
+/* Redessine les icônes Lucide (à rappeler après chaque ajout d'élément au DOM). */
 function refreshIcons() { if (window.lucide) window.lucide.createIcons(); }
+/* Génère un identifiant unique court (basé sur l'heure + un peu de hasard). */
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 
 /* ---------------------------------------------------------------------
    5. STATUT & MODÈLES (API Ollama)
    --------------------------------------------------------------------- */
+/* Vérifie si Ollama répond et met à jour le voyant vert/rouge dans la sidebar.
+   Appelée au démarrage puis toutes les 15 secondes. */
 async function verifierStatut() {
   try {
     const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
@@ -325,6 +338,7 @@ async function verifierStatut() {
   }
 }
 
+/* Récupère la liste des modèles installés sur Ollama et remplit le menu déroulant. */
 async function detecterModeles() {
   let modeles = MODELES_REPLI;
   try {
@@ -342,6 +356,7 @@ async function detecterModeles() {
   });
   majModelPill();
 }
+/* Met à jour la pastille en haut qui affiche le nom du modèle actif. */
 function majModelPill() {
   modelPill.textContent = modelSel.options[modelSel.selectedIndex]?.text || "—";
 }
@@ -349,7 +364,9 @@ function majModelPill() {
 /* ---------------------------------------------------------------------
    6. BIBLIOTHÈQUE : PROJETS + CHATS
    --------------------------------------------------------------------- */
+/* Retrouve une conversation par son identifiant. */
 function trouverChat(id) { return state.chats.find(c => c.id === id); }
+/* Renvoie la conversation actuellement ouverte. */
 function chatActif()     { return trouverChat(state.actifId); }
 
 /* Crée une conversation (optionnellement dans un projet) et l'ouvre. */
@@ -453,6 +470,7 @@ async function supprimerProjet(id, ev) {
   toast("Projet supprimé");
 }
 
+/* Ouvre ou ferme un projet (plie/déplie la liste de ses conversations). */
 function basculerProjet(id) {
   const p = state.projets.find(p => p.id === id);
   if (p) { p.ouvert = !p.ouvert; sauver(); renderLibrary(); }
@@ -517,6 +535,7 @@ function renderLibrary() {
   refreshIcons();
 }
 
+/* Construit le HTML d'une ligne de conversation dans la barre latérale. */
 function ligneChat(c) {
   const actif = c.id === state.actifId ? "active" : "";
   return `
@@ -538,12 +557,14 @@ function ligneChat(c) {
 /* ---------------------------------------------------------------------
    7. CATÉGORIES
    --------------------------------------------------------------------- */
+/* Sélectionne la catégorie du prochain message (réseau, matériel…). */
 function choisirCategorie(id) {
   state.categorie = id;
   sauver();
   renderEmpty(); // rafraîchit les suggestions et la sélection
 }
 
+/* Crée une catégorie personnalisée saisie par l'utilisateur. */
 async function nouvelleCategorie() {
   const nom = await demanderTexte("Nouvelle catégorie", "Nom de la catégorie");
   if (!nom) return;
@@ -559,6 +580,8 @@ async function nouvelleCategorie() {
 /* ---------------------------------------------------------------------
    8. ÉTAT VIDE + SUGGESTIONS
    --------------------------------------------------------------------- */
+/* Affiche l'écran d'accueil (orbe, catégories, suggestions) quand il n'y a
+   pas encore de message dans la conversation. */
 function renderEmpty() {
   chatTitleEl.textContent = chatActif() ? chatActif().titre : "Nouvelle conversation";
 
@@ -608,13 +631,16 @@ function renderConversation(chat) {
 /* ---------------------------------------------------------------------
    9. ENVOI + STREAMING
    --------------------------------------------------------------------- */
+/* Envoie le message quand on appuie sur Entrée (Maj+Entrée = nouvelle ligne). */
 function handleKey(e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
 }
+/* Ajuste automatiquement la hauteur de la zone de saisie au texte (max 170 px). */
 function autoResize(el) {
   el.style.height = "auto";
   el.style.height = Math.min(el.scrollHeight, 170) + "px";
 }
+/* Remplit la saisie avec une suggestion cliquée et l'envoie directement. */
 function poserQuestion(texte) { inputEl.value = texte; autoResize(inputEl); sendMessage(); }
 
 async function sendMessage() {
@@ -791,6 +817,7 @@ async function genererReponse(chat, texteUtilisateur) {
 /* ---------------------------------------------------------------------
    10. RENDU DES MESSAGES (DOM)
    --------------------------------------------------------------------- */
+/* Crée et affiche une bulle de message (utilisateur ou bot) dans la conversation. */
 function afficherMessage(role, texte) {
   const wrap = document.createElement("div");
   wrap.className = `msg ${role === "bot" ? "bot" : role}`;
@@ -807,6 +834,8 @@ function afficherMessage(role, texte) {
   return wrap;
 }
 
+/* Affiche l'indicateur « Analyse en cours… » avec les points animés pendant
+   qu'on attend la réponse du modèle. */
 function afficherTyping() {
   const wrap = document.createElement("div");
   wrap.className = "msg bot";
@@ -822,6 +851,8 @@ function afficherTyping() {
   return wrap;
 }
 
+/* Affiche un message d'erreur lisible (distingue un souci réseau/Ollama
+   d'une autre erreur). */
 function afficherErreur(err) {
   const reseau = String(err.message).includes("fetch") || String(err.message).includes("Failed") || err.name === "TimeoutError";
   const wrap = document.createElement("div");
@@ -839,6 +870,8 @@ function afficherErreur(err) {
   refreshIcons();
 }
 
+/* Ajoute sous une réponse la barre d'infos (modèle, durée, heure) et les
+   boutons Copier et Régénérer. */
 function ajouterMeta(wrap, contenu, secondes) {
   const body = wrap.querySelector(".msg-body");
   const modele = modelSel.options[modelSel.selectedIndex].text;
@@ -861,6 +894,7 @@ function ajouterMeta(wrap, contenu, secondes) {
   body.appendChild(meta);
 }
 
+/* Copie le texte de la réponse dans le presse-papiers et confirme « Copié ». */
 function copierTexte(btn, texte) {
   navigator.clipboard.writeText(texte).then(() => {
     btn.innerHTML = `<i data-lucide="check"></i> Copié`; refreshIcons();
@@ -1000,6 +1034,7 @@ let ragDB = null;
 // Cache en mémoire : Map<chunkId, Float32Array>
 const embMap = new Map();
 
+/* Ouvre (ou crée) la base IndexedDB qui stocke les vecteurs du RAG. */
 function ouvrirRagDB() {
   return new Promise((res, rej) => {
     const req = indexedDB.open(IDB_NAME, 1);
@@ -1008,12 +1043,14 @@ function ouvrirRagDB() {
     req.onerror   = () => rej(new Error("IndexedDB indisponible"));
   });
 }
+/* Enregistre un vecteur (embedding) d'un passage dans IndexedDB. */
 async function idbSauver(id, vecteur) {
   if (!ragDB) return;
   const tx = ragDB.transaction(IDB_STORE, "readwrite");
   tx.objectStore(IDB_STORE).put({ id, v: Array.from(vecteur) });
   return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
 }
+/* Charge tous les vecteurs d'IndexedDB vers le cache mémoire (embMap) au démarrage. */
 async function idbChargerTous() {
   if (!ragDB) return;
   const tx = ragDB.transaction(IDB_STORE, "readonly");
@@ -1024,6 +1061,7 @@ async function idbChargerTous() {
   });
   tous.forEach(r => embMap.set(r.id, new Float32Array(r.v)));
 }
+/* Vide complètement la base de vecteurs (avant une réindexation). */
 async function idbVider() {
   if (!ragDB) return;
   const tx = ragDB.transaction(IDB_STORE, "readwrite");
@@ -1031,6 +1069,7 @@ async function idbVider() {
   embMap.clear();
   return new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = rej; });
 }
+/* Supprime les vecteurs d'un seul document (quand on le retire de la base). */
 async function idbSupprimerDoc(docId) {
   if (!ragDB) return;
   const tx = ragDB.transaction(IDB_STORE, "readwrite");
@@ -1087,7 +1126,9 @@ function decouper(texte) {
   return chunks.filter(Boolean);
 }
 
-/* ---- 2. INDEXATION (embed + sauvegarde IndexedDB) ---- */
+/* ---- 2. INDEXATION (embed + sauvegarde IndexedDB) ----
+   Découpe tous les documents en passages, calcule un vecteur pour chacun et
+   les enregistre. C'est l'étape (un peu longue) faite quand on ajoute des docs. */
 async function indexer() {
   await idbVider();
 
@@ -1223,7 +1264,8 @@ async function recupererContexte(question) {
     .slice(0, TOP_K);
 }
 
-/* ---- 6. STATUT RAG ---- */
+/* ---- 6. STATUT RAG ----
+   Met à jour le petit texte de la sidebar (ex. « 648 passages · hybride + MMR »). */
 function majRagStatus() {
   const n = state.kb.chunks.length;
   if (!state.rag) { ragStatusEl.textContent = "Désactivé"; return; }
@@ -1235,7 +1277,9 @@ function majRagStatus() {
 /* ---------------------------------------------------------------------
    13. RAG : GESTION DE LA FENÊTRE (base de connaissances)
    --------------------------------------------------------------------- */
+/* Ouvre la fenêtre de gestion de la base de connaissances. */
 function openKB()  { kbOverlay.classList.add("open"); renderKB(); refreshIcons(); }
+/* Ferme la fenêtre de gestion de la base de connaissances. */
 function closeKB() { kbOverlay.classList.remove("open"); }
 
 /* ---- Import de fichiers (PDF, DOCX, TXT, MD) ---- */
@@ -1247,14 +1291,18 @@ window.addEventListener("load", () => {
   }
 });
 
+/* Survol d'un fichier au-dessus de la zone de dépôt (effet visuel). */
 function dragOver(e)  { e.preventDefault(); document.getElementById("kb-dropzone").classList.add("dragover"); }
+/* Le fichier quitte la zone de dépôt (retire l'effet visuel). */
 function dragLeave()  { document.getElementById("kb-dropzone").classList.remove("dragover"); }
+/* Fichier déposé par glisser-déposer : on le traite. */
 function dropFile(e)  {
   e.preventDefault();
   dragLeave();
   const file = e.dataTransfer.files[0];
   if (file) traiterFichier(file);
 }
+/* Fichier choisi via le bouton « parcourir » : on le traite. */
 function importerFichier(e) {
   const file = e.target.files[0];
   if (file) traiterFichier(file);
@@ -1356,10 +1404,13 @@ function setProg(visible, texte = "", pct = 0) {
   if (barFill) barFill.style.setProperty("--pct", pct + "%");
 }
 
+/* Met à jour le texte d'avancement pendant l'indexation. */
 function setKBProgress(texte) {
   if (kbStatusEl) kbStatusEl.textContent = texte;
 }
 
+/* Dessine le contenu de la fenêtre « Base de connaissances » : statut + liste
+   des documents. */
 function renderKB() {
   // Statut
   const n = state.kb.chunks.length;
@@ -1387,6 +1438,7 @@ function renderKB() {
   refreshIcons();
 }
 
+/* Ajoute un nouveau document à la base puis relance l'indexation. */
 async function ajouterDoc() {
   const nom = document.getElementById("kb-doc-nom").value.trim();
   const texte = document.getElementById("kb-doc-texte").value.trim();
@@ -1401,6 +1453,7 @@ async function ajouterDoc() {
   toast("Document ajouté et indexé");
 }
 
+/* Retire un document de la base (et ses vecteurs dans IndexedDB). */
 async function supprimerDoc(id) {
   if (!await demanderConfirmation("Supprimer le document",
       "Ce document sera retiré de la base de connaissances.")) return;
@@ -1412,6 +1465,7 @@ async function supprimerDoc(id) {
   toast("Document supprimé");
 }
 
+/* Relance l'indexation de toute la base (bouton « Réindexer »). */
 async function reindexer() {
   setKBProgress("Indexation…");
   const res = await indexer();
@@ -1422,6 +1476,7 @@ async function reindexer() {
 /* ---------------------------------------------------------------------
    14. VIDER LA CONVERSATION ACTIVE
    --------------------------------------------------------------------- */
+/* Vide tous les messages de la conversation ouverte (après confirmation). */
 async function effacerChatActif() {
   const chat = chatActif();
   if (!chat || !chat.messages.length) return;
@@ -1495,6 +1550,8 @@ function chargerVoix() {
   state.voixNom = choix.name;
 }
 
+/* Initialise l'assistant vocal : interrupteur de lecture, menu des voix, et la
+   reconnaissance vocale (micro) avec ses écouteurs d'événements. */
 function initVoix() {
   // Lecture vocale (toggle)
   ttsToggle.checked = state.lectureVoix;
@@ -1556,11 +1613,13 @@ function initVoix() {
   recognition.onend = () => { if (ecouteActive) arreterEcoute(); };
 }
 
+/* Démarre ou arrête l'écoute du micro (bouton micro). */
 function toggleEcoute() {
   if (!SR) { toast("Reconnaissance vocale non supportée. Utilisez Chrome ou Edge."); return; }
   ecouteActive ? arreterEcoute() : demarrerEcoute();
 }
 
+/* Lance l'écoute du micro et passe le bouton en mode « écoute ». */
 function demarrerEcoute() {
   arreterVoix(); // évite que l'IA parle pendant l'écoute
   try { recognition.start(); }
@@ -1572,6 +1631,7 @@ function demarrerEcoute() {
   hintEl.classList.add("listening");
 }
 
+/* Arrête l'écoute du micro et remet le bouton à l'état normal. */
 function arreterEcoute() {
   try { recognition.stop(); } catch {}
   ecouteActive = false;
@@ -1733,6 +1793,8 @@ const faceBadge   = document.getElementById("face-badge");
 const faceToggle  = document.getElementById("face-toggle");
 const faceStatus  = document.getElementById("face-status");
 
+/* Initialise Face ID : état de l'interrupteur et ouverture auto de la fenêtre
+   si on l'active sans visage enregistré. */
 function initFaceId() {
   faceToggle.checked = state.faceId.actif;
   majFaceStatus();
@@ -1747,6 +1809,7 @@ function initFaceId() {
   });
 }
 
+/* Le visage est-il vérifié et l'autorisation encore valide (5 min) ? */
 function faceAutorise() { return Date.now() < faceAutoriseJusqua; }
 
 /* ---- Calibration multi-empreintes ----
@@ -1782,6 +1845,7 @@ function distanceMin(d) {
   return min;
 }
 
+/* Met à jour le texte d'état de Face ID dans la sidebar (nb d'échantillons…). */
 function majFaceStatus() {
   if (!state.faceId.actif) { faceStatus.textContent = "Désactivé"; return; }
   const n = faceRefs().length;
@@ -1790,9 +1854,12 @@ function majFaceStatus() {
   faceStatus.textContent = faceAutorise() ? `Visage vérifié · ${ech}` : `${ech} · vérification requise`;
 }
 
+/* Ouvre la fenêtre Face ID. */
 function openFace()  { faceOverlay.classList.add("open"); refreshIcons(); }
+/* Ferme la fenêtre Face ID et coupe la caméra. */
 function closeFace() { faceOverlay.classList.remove("open"); arreterCamera(); }
 
+/* Affiche un petit badge d'état sur la vidéo (scan / ok / fail). */
 function setBadge(texte, type = "") {
   faceBadge.className = "face-badge" + (type ? " " + type : "");
   faceBadge.textContent = texte;
@@ -1822,6 +1889,7 @@ async function chargerFaceApi() {
   faceApiPret = true;
 }
 
+/* Charge dynamiquement un script externe (ici face-api.js) à la demande. */
 function chargerScript(src) {
   return new Promise((res, rej) => {
     const s = document.createElement("script");
@@ -1831,6 +1899,7 @@ function chargerScript(src) {
   });
 }
 
+/* Allume ou éteint la caméra dans la fenêtre Face ID. */
 async function basculerCamera() {
   if (faceStream) { arreterCamera(); return; }
   try {
@@ -1846,6 +1915,7 @@ async function basculerCamera() {
   }
 }
 
+/* Coupe la caméra et libère le flux vidéo. */
 function arreterCamera() {
   if (faceStream) { faceStream.getTracks().forEach(t => t.stop()); faceStream = null; }
   faceVideo.srcObject = null;
@@ -1931,18 +2001,21 @@ let lockStream = null;
 const lockOverlay = document.getElementById("lock-overlay");
 const lockVideo   = document.getElementById("lock-video");
 
+/* Affiche l'écran de verrouillage et floute l'app au démarrage. */
 function initLock() {
   document.querySelector(".app").classList.add("locked");
   lockOverlay.classList.remove("hidden");
   refreshIcons();
 }
 
+/* Badge d'état sur l'écran de verrouillage. */
 function lockBadge(texte, type = "") {
   const b = document.getElementById("lock-badge");
   b.className = "face-badge" + (type ? " " + type : "");
   b.textContent = texte;
 }
 
+/* Démarre la caméra de l'écran de verrouillage (renvoie false si refusée). */
 async function lockDemarrerCamera() {
   if (lockStream) return true;
   try {
@@ -1957,6 +2030,7 @@ async function lockDemarrerCamera() {
   }
 }
 
+/* Coupe la caméra de l'écran de verrouillage. */
 function lockArreterCamera() {
   if (lockStream) { lockStream.getTracks().forEach(t => t.stop()); lockStream = null; }
   if (lockVideo) lockVideo.srcObject = null;
@@ -2053,6 +2127,7 @@ function toggleConversation() {
   voiceConv ? arreterConversation() : demarrerConversation();
 }
 
+/* Démarre le mode conversation mains-libres (active la voix et lance la boucle). */
 function demarrerConversation() {
   if (!SR) { toast("Conversation vocale non supportée. Utilisez Chrome ou Edge."); return; }
   if (ecouteActive) arreterEcoute(); // coupe la dictée simple si active
@@ -2069,6 +2144,7 @@ function demarrerConversation() {
   boucleVocale();
 }
 
+/* Arrête le mode conversation (coupe le micro et la voix). */
 function arreterConversation() {
   voiceConv = false;
   if (vocalRecognition) { try { vocalRecognition.stop(); } catch {} }

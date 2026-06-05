@@ -93,8 +93,10 @@ function majRagStatus() {
   refreshIcons();
 }
 
+/* Redessine les icônes Lucide après modification du DOM. */
 function refreshIcons() { if (window.lucide) window.lucide.createIcons(); }
 
+/* Petite notification temporaire en bas de l'écran. */
 function toast(message) {
   toastEl.textContent = message;
   toastEl.classList.add("show");
@@ -105,6 +107,7 @@ function toast(message) {
 /* ---------------------------------------------------------------------
    Statut + détection des modèles installés
    --------------------------------------------------------------------- */
+/* Vérifie si Ollama répond et met à jour le voyant de connexion. */
 async function verifierStatut() {
   try {
     const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
@@ -117,6 +120,7 @@ async function verifierStatut() {
   }
 }
 
+/* Récupère les modèles installés et remplit les deux menus (A et B). */
 async function detecterModeles() {
   let modeles = [];
   try {
@@ -137,6 +141,7 @@ async function detecterModeles() {
   selB.selectedIndex = modeles.length > 1 ? 1 : 0;
 }
 
+/* Remplit un menu déroulant avec la liste des modèles. */
 function remplirSelect(sel, modeles) {
   sel.innerHTML = "";
   modeles.forEach(nom => {
@@ -149,9 +154,11 @@ function remplirSelect(sel, modeles) {
 /* ---------------------------------------------------------------------
    Saisie
    --------------------------------------------------------------------- */
+/* Entrée = lancer la comparaison ; Maj+Entrée = nouvelle ligne. */
 function handleKey(e) {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); lancerComparaison(); }
 }
+/* Ajuste la hauteur de la zone de saisie au contenu. */
 function autoResize(el) {
   el.style.height = "auto";
   el.style.height = Math.min(el.scrollHeight, 170) + "px";
@@ -160,6 +167,8 @@ function autoResize(el) {
 /* ---------------------------------------------------------------------
    Lancement de la comparaison (les deux modèles en parallèle)
    --------------------------------------------------------------------- */
+/* Lance la comparaison : récupère le contexte RAG une fois, puis interroge les
+   deux modèles en parallèle et met en évidence le plus rapide à la fin. */
 async function lancerComparaison() {
   const question = inputEl.value.trim();
   if (!question || enCours) return;
@@ -328,6 +337,7 @@ function afficherSources(extraits) {
   refreshIcons();
 }
 
+/* Affiche un message d'erreur dans une colonne (souci réseau ou autre). */
 function afficherErreur(out, err) {
   const reseau = String(err.message).includes("fetch")
     || String(err.message).includes("Failed")
@@ -345,10 +355,13 @@ function afficherErreur(out, err) {
 /* ---------------------------------------------------------------------
    Rendu Markdown maison (identique à l'assistant, sécurisé)
    --------------------------------------------------------------------- */
+/* Neutralise le HTML (sécurité) avant tout affichage. */
 function escapeHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/* Transforme le markdown de la réponse en HTML. On échappe le HTML EN PREMIER
+   (anti-XSS), puis on applique le formatage (gras, listes, code…). */
 function renderMarkdown(texte) {
   let t = escapeHtml(texte);
   t = t.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, l, code) => `<pre><code>${code.replace(/\n$/, "")}</code></pre>`);
