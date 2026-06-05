@@ -21,7 +21,10 @@
 (function () {
   "use strict";
 
-  const OLLAMA_URL  = "http://localhost:11435"; // tunnel SSH vers le serveur GPU (cf. script.js)
+  // Repli automatique GPU → local (cf. script.js) : on essaie le 11435 (tunnel
+  // GPU) puis le 11434 (Ollama local). On mémorise la première adresse qui marche.
+  const OLLAMA_PORTS = ["http://localhost:11435", "http://localhost:11434"];
+  let OLLAMA_URL = OLLAMA_PORTS[0];
   const STORE_KEY   = "support-ia-v1";
   const EMBED_MODEL = "nomic-embed-text:latest";
   const TOP_K       = 2;
@@ -47,27 +50,33 @@
     } catch { chunks = []; embeddingsActifs = false; }
   }
 
-  /* ---- Embedding via Ollama (mêmes formats que l'assistant) ---- */
+  /* ---- Embedding via Ollama (mêmes formats que l'assistant) ----
+     Essaie chaque adresse (GPU puis local) et, pour chacune, les deux routes
+     d'embedding. Mémorise la première adresse qui fonctionne. */
   async function embed(texte) {
-    const tentatives = [
-      { url: `${OLLAMA_URL}/api/embed`,      body: { model: EMBED_MODEL, input: texte } },
-      { url: `${OLLAMA_URL}/api/embeddings`, body: { model: EMBED_MODEL, prompt: texte } }
-    ];
+    // On commence par l'adresse déjà connue comme fonctionnelle, puis les autres.
+    const adresses = [OLLAMA_URL, ...OLLAMA_PORTS.filter(u => u !== OLLAMA_URL)];
     let dernierErreur;
-    for (const t of tentatives) {
-      try {
-        const r = await fetch(t.url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(t.body),
-          signal: AbortSignal.timeout(15000)
-        });
-        if (!r.ok) { dernierErreur = new Error(`HTTP ${r.status}`); continue; }
-        const d = await r.json();
-        const vecteur = (d.embeddings && d.embeddings[0]) || d.embedding;
-        if (vecteur && vecteur.length) return vecteur;
-        dernierErreur = new Error("Vecteur vide reçu");
-      } catch (e) { dernierErreur = e; }
+    for (const base of adresses) {
+      const tentatives = [
+        { url: `${base}/api/embed`,      body: { model: EMBED_MODEL, input: texte } },
+        { url: `${base}/api/embeddings`, body: { model: EMBED_MODEL, prompt: texte } }
+      ];
+      for (const t of tentatives) {
+        try {
+          const r = await fetch(t.url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(t.body),
+            signal: AbortSignal.timeout(15000)
+          });
+          if (!r.ok) { dernierErreur = new Error(`HTTP ${r.status}`); continue; }
+          const d = await r.json();
+          const vecteur = (d.embeddings && d.embeddings[0]) || d.embedding;
+          if (vecteur && vecteur.length) { OLLAMA_URL = base; return vecteur; }
+          dernierErreur = new Error("Vecteur vide reçu");
+        } catch (e) { dernierErreur = e; }
+      }
     }
     throw dernierErreur;
   }

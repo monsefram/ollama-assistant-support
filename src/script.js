@@ -13,11 +13,14 @@
    1. CONFIGURATION
    --------------------------------------------------------------------- */
 
-// Port 11435 = tunnel SSH vers le serveur GPU distant. On évite volontairement
-// le 11434 (port d'un Ollama installé localement) pour ne jamais entrer en
-// conflit : l'interface parle UNIQUEMENT au serveur via le tunnel.
+// Repli automatique GPU → local. On essaie d'abord le port 11435 (tunnel SSH
+// vers le serveur GPU loué), puis le 11434 (Ollama installé localement). Le
+// premier qui répond devient l'adresse active. Ainsi :
+//   - tunnel ouvert  → on utilise le GPU (rapide)
+//   - tunnel fermé   → on bascule sur le local automatiquement
 //   ssh -p <port> root@<hote>.vast.ai -L 11435:localhost:11434
-const OLLAMA_URL = "http://localhost:11435";
+const OLLAMA_PORTS = ["http://localhost:11435", "http://localhost:11434"]; // GPU puis local
+let OLLAMA_URL = OLLAMA_PORTS[0];   // adresse active (ajustée au démarrage)
 const STORE_KEY  = "support-ia-v1"; // clé de sauvegarde locale
 
 // RAG : modèle d'embeddings et nombre de passages récupérés.
@@ -257,7 +260,7 @@ function toast(message) {
 /* ---------------------------------------------------------------------
    4. INITIALISATION
    --------------------------------------------------------------------- */
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   charger();
 
   renderLibrary();
@@ -266,8 +269,8 @@ window.addEventListener("DOMContentLoaded", () => {
   } else {
     renderEmpty();
   }
+  await verifierStatut();          // détecte GPU ou local AVANT de charger les modèles
   detecterModeles();
-  verifierStatut();
   setInterval(verifierStatut, 15000);
   modelSel.addEventListener("change", majModelPill);
 
@@ -324,18 +327,27 @@ function uid() { return Date.now().toString(36) + Math.random().toString(36).sli
 /* ---------------------------------------------------------------------
    5. STATUT & MODÈLES (API Ollama)
    --------------------------------------------------------------------- */
-/* Vérifie si Ollama répond et met à jour le voyant vert/rouge dans la sidebar.
-   Appelée au démarrage puis toutes les 15 secondes. */
+/* Teste les adresses possibles (GPU puis local), choisit la PREMIÈRE qui
+   répond comme adresse active, et met à jour le voyant + le mode affiché.
+   Appelée au démarrage puis toutes les 15 secondes → repli automatique si le
+   tunnel GPU se ferme en cours de route. */
 async function verifierStatut() {
-  try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
-    if (!r.ok) throw new Error();
-    statusDot.className = "status-dot online";
-    statusLabel.textContent = "Ollama connecté";
-  } catch {
-    statusDot.className = "status-dot offline";
-    statusLabel.textContent = "Ollama hors ligne";
+  for (const url of OLLAMA_PORTS) {
+    try {
+      const r = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(2500) });
+      if (!r.ok) continue;
+      const changement = OLLAMA_URL !== url;
+      OLLAMA_URL = url;                     // cette adresse devient l'adresse active
+      statusDot.className = "status-dot online";
+      statusLabel.textContent = url.includes("11435") ? "GPU connecté" : "Ollama local";
+      // Si on vient de basculer d'un mode à l'autre, on rafraîchit la liste des modèles.
+      if (changement && typeof detecterModeles === "function") detecterModeles();
+      return;
+    } catch { /* cette adresse ne répond pas : on essaie la suivante */ }
   }
+  // Aucune des deux adresses ne répond.
+  statusDot.className = "status-dot offline";
+  statusLabel.textContent = "Ollama hors ligne";
 }
 
 /* Récupère la liste des modèles installés sur Ollama et remplit le menu déroulant. */

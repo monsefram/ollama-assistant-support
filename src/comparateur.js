@@ -13,7 +13,10 @@
 
 "use strict";
 
-const OLLAMA_URL = "http://localhost:11435"; // tunnel SSH vers le serveur GPU (cf. script.js)
+// Repli automatique GPU → local : on essaie le 11435 (tunnel GPU) puis le 11434
+// (Ollama local). Le premier qui répond devient l'adresse active (cf. script.js).
+const OLLAMA_PORTS = ["http://localhost:11435", "http://localhost:11434"];
+let OLLAMA_URL = OLLAMA_PORTS[0];
 
 /* Même esprit que l'assistant principal : on garde le même system prompt et
    les mêmes réglages d'inférence pour que la comparaison soit honnête (seul
@@ -65,8 +68,8 @@ let ragDispo = false;   // la base de connaissances contient-elle des passages ?
    Initialisation
    --------------------------------------------------------------------- */
 window.addEventListener("DOMContentLoaded", async () => {
+  await verifierStatut();           // détecte GPU ou local AVANT de charger les modèles
   detecterModeles();
-  verifierStatut();
   setInterval(verifierStatut, 15000);
 
   // Charge la base de connaissances partagée (gérée par l'assistant principal).
@@ -107,17 +110,21 @@ function toast(message) {
 /* ---------------------------------------------------------------------
    Statut + détection des modèles installés
    --------------------------------------------------------------------- */
-/* Vérifie si Ollama répond et met à jour le voyant de connexion. */
+/* Teste le GPU puis le local, garde la première adresse qui répond, et affiche
+   le mode. Permet le repli automatique si le tunnel GPU n'est pas ouvert. */
 async function verifierStatut() {
-  try {
-    const r = await fetch(`${OLLAMA_URL}/api/tags`, { signal: AbortSignal.timeout(3000) });
-    if (!r.ok) throw new Error();
-    statusDot.className = "status-dot online";
-    statusLabel.textContent = "Ollama connecté";
-  } catch {
-    statusDot.className = "status-dot offline";
-    statusLabel.textContent = "Ollama hors ligne";
+  for (const url of OLLAMA_PORTS) {
+    try {
+      const r = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(2500) });
+      if (!r.ok) continue;
+      OLLAMA_URL = url;
+      statusDot.className = "status-dot online";
+      statusLabel.textContent = url.includes("11435") ? "GPU connecté" : "Ollama local";
+      return;
+    } catch { /* on essaie l'adresse suivante */ }
   }
+  statusDot.className = "status-dot offline";
+  statusLabel.textContent = "Ollama hors ligne";
 }
 
 /* Récupère les modèles installés et remplit les deux menus (A et B). */
