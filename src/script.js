@@ -740,20 +740,25 @@ async function genererReponse(chat, texteUtilisateur) {
     curseur.className = "cursor";
     contenuEl.appendChild(curseur);
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
+    // ---- Lecture du flux (streaming) ----
+    // Ollama renvoie la réponse morceau par morceau (et non d'un coup). On lit
+    // le flux au fur et à mesure pour afficher le texte progressivement
+    // (effet "machine à écrire", comme ChatGPT).
+    const reader = res.body.getReader();   // permet de lire le flux morceau par morceau
+    const decoder = new TextDecoder();     // convertit les octets reçus en texte
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const { done, value } = await reader.read();   // attend le prochain morceau
+      if (done) break;                               // plus rien à lire : on sort
+      // Chaque morceau peut contenir plusieurs lignes JSON (une par token).
       const lignes = decoder.decode(value).split("\n").filter(l => l.trim());
       for (const ligne of lignes) {
         try {
           const data = JSON.parse(ligne);
-          reponse += data.message?.content || "";
-          contenuEl.textContent = reponse;
+          reponse += data.message?.content || "";    // on ajoute le bout de texte reçu
+          contenuEl.textContent = reponse;           // et on l'affiche tout de suite
           contenuEl.appendChild(curseur);
-          convEl.scrollTop = convEl.scrollHeight;
-        } catch { /* fragment incomplet */ }
+          convEl.scrollTop = convEl.scrollHeight;     // garde la vue en bas
+        } catch { /* morceau de JSON incomplet : on attendra le suivant */ }
       }
     }
 
@@ -888,12 +893,17 @@ function afficherSources(wrap, extraits) {
 /* ---------------------------------------------------------------------
    11. RENDU MARKDOWN (maison, sécurisé : échappement avant formatage)
    --------------------------------------------------------------------- */
+// Neutralise le HTML : "<" devient "&lt;", etc. Un texte échappé ne peut plus
+// être interprété comme du code par le navigateur.
 function escapeHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function echapper(s) { return s.replace(/'/g, "\\'"); }
 
 function renderMarkdown(texte) {
+  // SÉCURITÉ (anti-XSS) : on échappe le HTML EN PREMIER, puis on ajoute notre
+  // propre formatage. Ainsi, si la réponse contenait du code malveillant
+  // (ex. <script>), il est neutralisé avant qu'on transforme le markdown.
   let t = escapeHtml(texte);
   t = t.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, l, code) => `<pre><code>${code.replace(/\n$/, "")}</code></pre>`);
   t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
@@ -968,10 +978,18 @@ async function embed(texte) {
               (pas de limite de 5 Mo).
    ===================================================================== */
 
-/* ---- Similarité cosinus entre deux vecteurs ---- */
+/* ---- Similarité cosinus entre deux vecteurs ----
+   Mesure si deux textes ont le même SENS (1 = identique, 0 = sans rapport).
+   On calcule l'angle entre les deux vecteurs : produit scalaire divisé par
+   le produit des longueurs. Insensible à la longueur du texte. */
 function cosinus(a, b) {
   let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];   // produit scalaire (a·b)
+    na  += a[i] * a[i];   // longueur de a au carré
+    nb  += b[i] * b[i];   // longueur de b au carré
+  }
+  // + 1e-8 : évite une division par zéro si un vecteur est nul
   return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8);
 }
 
@@ -1036,30 +1054,35 @@ function enPhrases(texte) {
     .filter(Boolean);
 }
 
-/* Regroupe les phrases en chunks de ~CHUNK_CIBLE caractères avec recouvrement. */
+/* Regroupe les phrases en "chunks" (passages) d'environ CHUNK_CIBLE caractères,
+   qui se CHEVAUCHENT de CHUNK_RECOUV caractères. Le chevauchement évite de
+   couper une idée en deux : si une instruction est à la frontière de deux
+   passages, elle reste entière dans au moins un des deux. */
 function decouper(texte) {
-  const phrases = enPhrases(texte);
+  const phrases = enPhrases(texte);   // on travaille phrase par phrase
   const chunks = [];
   let debut = 0;
 
   while (debut < phrases.length) {
     let bloc = "";
     let fin = debut;
+    // On ajoute des phrases tant qu'on n'a pas atteint la taille cible.
     while (fin < phrases.length && (bloc + " " + phrases[fin]).length < CHUNK_CIBLE) {
       bloc += (bloc ? " " : "") + phrases[fin];
       fin++;
     }
-    // Ajoute au moins une phrase même si elle dépasse la cible.
+    // Sécurité : on garde au moins une phrase même si elle dépasse la cible.
     if (fin === debut) { bloc = phrases[debut]; fin = debut + 1; }
     chunks.push(bloc.trim());
 
-    // Calcule le point de départ suivant en reculant de CHUNK_RECOUV caractères.
+    // On recule de CHUNK_RECOUV caractères pour que le prochain passage
+    // reprenne la fin du précédent → c'est ça, le chevauchement.
     let recouv = 0;
     while (fin > debut + 1 && recouv < CHUNK_RECOUV) {
       fin--;
       recouv += phrases[fin].length;
     }
-    debut = Math.max(debut + 1, fin);
+    debut = Math.max(debut + 1, fin);   // point de départ du prochain passage
   }
   return chunks.filter(Boolean);
 }
@@ -1097,26 +1120,34 @@ async function indexer() {
 }
 
 /* ---- 3. SCORING HYBRIDE (sémantique 65 % + BM25 35 %) ---- */
+/* Met un texte en minuscules, enlève les accents, et le découpe en mots
+   simples. Ex. : "Wi-Fi déconnecté" -> ["wi", "fi", "deconnecte"]. */
 function normaliser(s) {
   return (s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").match(/[a-z0-9]+/g)) || [];
 }
 
-/* Score BM25 simplifié : tient compte de la fréquence et longueur du chunk. */
+/* Score BM25 simplifié : mesure à quel point un passage contient les MOTS
+   EXACTS de la question (complément du score sémantique).
+   - tf = fréquence du mot dans le passage (plus il revient, plus le score monte)
+   - k1 = saturation (un mot répété 10 fois ne vaut pas 10 fois plus)
+   - b  = pénalise les passages trop longs (qui contiennent les mots "par hasard") */
 function scoreBM25(termes, texte) {
   const k1 = 1.5, b = 0.75, moyenneLen = 250;
   const mots = normaliser(texte);
   const freq = {};
-  mots.forEach(m => { freq[m] = (freq[m] || 0) + 1; });
+  mots.forEach(m => { freq[m] = (freq[m] || 0) + 1; }); // compte chaque mot
   const docLen = mots.length;
   let s = 0;
   termes.forEach(t => {
-    if (t.length < 3) return;
-    const tf = freq[t] || 0;
+    if (t.length < 3) return;          // on ignore les mots trop courts ("le", "de")
+    const tf = freq[t] || 0;           // combien de fois ce mot apparaît
     s += (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * docLen / moyenneLen));
   });
-  return s / (termes.length || 1);
+  return s / (termes.length || 1);     // moyenne sur les mots de la question
 }
 
+/* Score final = 65 % de sens (cosinus) + 35 % de mots-clés (BM25).
+   Math.min(..., 1) borne le BM25 pour qu'il reste comparable au cosinus. */
 function scoreHybride(semScore, bm25Score) {
   return 0.65 * semScore + 0.35 * Math.min(bm25Score, 1);
 }
@@ -1124,10 +1155,13 @@ function scoreHybride(semScore, bm25Score) {
 /* ---- 4. MMR — Maximal Marginal Relevance (diversité des résultats) ---- */
 const MMR_LAMBDA = 0.65; // 1 = pertinence pure, 0 = diversité pure
 
+/* MMR : choisit les `topK` meilleurs passages, mais en évitant qu'ils se
+   ressemblent trop entre eux. On veut de la pertinence ET de la variété, pour
+   ne pas injecter deux fois la même information. */
 function mmr(candidats, topK) {
   if (!candidats.length) return [];
-  const selectionnes = [];
-  const restants = [...candidats];
+  const selectionnes = [];          // passages déjà retenus
+  const restants = [...candidats];  // passages encore en lice
 
   while (selectionnes.length < topK && restants.length) {
     let meilleurIdx = 0;
@@ -1135,6 +1169,8 @@ function mmr(candidats, topK) {
 
     restants.forEach((c, i) => {
       const pertinence = c.scoreHybride;
+      // maxSim = à quel point ce candidat ressemble au passage déjà retenu
+      // qui lui ressemble le plus (0 si rien n'est encore retenu).
       const maxSim = selectionnes.length
         ? Math.max(...selectionnes.map(s => {
             const ea = embMap.get(c.id);
@@ -1142,12 +1178,13 @@ function mmr(candidats, topK) {
             return (ea && eb) ? cosinus(ea, eb) : 0;
           }))
         : 0;
+      // On récompense la pertinence et on PÉNALISE la ressemblance.
       const score = MMR_LAMBDA * pertinence - (1 - MMR_LAMBDA) * maxSim;
       if (score > meilleurScore) { meilleurScore = score; meilleurIdx = i; }
     });
 
-    selectionnes.push(restants[meilleurIdx]);
-    restants.splice(meilleurIdx, 1);
+    selectionnes.push(restants[meilleurIdx]);  // on garde le meilleur
+    restants.splice(meilleurIdx, 1);           // et on le retire des restants
   }
   return selectionnes;
 }
