@@ -270,9 +270,9 @@ Mon projet montre que l'avenir des outils IA n'est pas forcément dans le « tou
 
 [2] Ollama, "FAQ," *Ollama Documentation*. [Online]. Available: https://docs.ollama.com/faq. [Accessed: Jun. 4, 2026].
 
-[3] National Institute of Standards and Technology, "Artificial Intelligence Risk Management Framework (AI RMF 1.0)," NIST, Gaithersburg, MD, USA, Rep. NIST AI 100-1, Jan. 2023. [Online]. Available: https://nvlpubs.nist.gov/nistpubs/ai/nist.ai.100-1.pdf. [Accessed: Jun. 4, 2026].
+[3] National Institute of Standards and Technology, "AI Risk Management Framework," NIST. [Online]. Available: https://www.nist.gov/itl/ai-risk-management-framework. [Accessed: Jun. 4, 2026].
 
-[4] National Institute of Standards and Technology, "Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile," NIST, Gaithersburg, MD, USA, Rep. NIST AI 600-1, Jul. 2024. [Online]. Available: https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf. [Accessed: Jun. 4, 2026].
+[4] National Institute of Standards and Technology, "Artificial Intelligence Risk Management Framework: Generative Artificial Intelligence Profile," NIST. [Online]. Available: https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence. [Accessed: Jun. 4, 2026].
 
 [5] OWASP, "OWASP Top 10 for LLM Applications 2025," *OWASP Foundation*, 2025. [Online]. Available: https://genai.owasp.org/llm-top-10/. [Accessed: Jun. 4, 2026].
 
