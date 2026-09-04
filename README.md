@@ -1,8 +1,12 @@
 # Serveur IA self-hosted avec Ollama pour le support technique
 
-Cours : Veille technologique (420-1SH-SW)  
-Étudiant : [Monsif  ramhane]  
-Session : [H26]
+**FR** — Assistant IA de **support informatique** auto-hébergé : un serveur **Ollama** local, un assistant configuré par *system prompt*, et une interface web (chat, **RAG** sur une base de connaissances, reconnaissance vocale, comparateur de modèles). **100 % hors ligne** — aucune donnée ne quitte la machine.
+
+**EN** — A self-hosted **IT-support** AI assistant: a local **Ollama** server, an assistant configured via a system prompt, and a web UI (chat, **RAG** over a knowledge base, voice input, model comparator). **Fully offline** — no data leaves the machine.
+
+**Stack** : JavaScript · HTML/CSS · Ollama (`localhost:11434`) · RAG · pdf.js / mammoth.js.
+
+Cours : Veille technologique (420-1SH-SW) · Session : H26
 
 ---
 
@@ -88,4 +92,4 @@ npx -y serve "src" -p 3000
 
 ## Lien du dépôt GitHub
 
-https://github.com/monsefram/Projet-cours-technologie
+https://github.com/monsefram/ollama-assistant-support
